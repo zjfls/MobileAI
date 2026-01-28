@@ -74,6 +74,7 @@ fun EditorScreen(
     val isEraserState = remember { mutableStateOf(false) }
     val colorArgbState = remember { mutableLongStateOf(0xFF111111) }
     val sizeState = remember { mutableFloatStateOf(6f) }
+    var simulatePressureWithSizeSlider by remember { mutableStateOf(false) }
 
     var overflowExpanded by remember { mutableStateOf(false) }
     var renameDialogOpen by remember { mutableStateOf(false) }
@@ -203,6 +204,21 @@ fun EditorScreen(
                             },
                         )
                         DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (simulatePressureWithSizeSlider) {
+                                        "模拟压感（粗细滑条）: 开"
+                                    } else {
+                                        "模拟压感（粗细滑条）: 关"
+                                    },
+                                )
+                            },
+                            onClick = {
+                                overflowExpanded = false
+                                simulatePressureWithSizeSlider = !simulatePressureWithSizeSlider
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text("导出 PDF") },
                             onClick = {
                                 overflowExpanded = false
@@ -282,6 +298,7 @@ fun EditorScreen(
                     tool = toolKindState.value,
                     colorArgb = colorArgbState.longValue,
                     size = sizeState.floatValue,
+                    simulatePressureWithSizeSlider = simulatePressureWithSizeSlider,
                     onDocChange = { updated, committed ->
                         if (committed) {
                             docState.value?.let { current ->
@@ -311,6 +328,7 @@ fun EditorScreen(
                     tool = toolKindState.value,
                     colorArgb = colorArgbState.longValue,
                     size = sizeState.floatValue,
+                    simulatePressureWithSizeSlider = simulatePressureWithSizeSlider,
                     onDocChange = { updated, committed ->
                         if (committed) {
                             docState.value?.let { current ->

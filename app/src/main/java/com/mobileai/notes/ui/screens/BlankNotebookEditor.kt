@@ -32,6 +32,7 @@ fun BlankNotebookEditor(
     tool: ToolKind,
     colorArgb: Long,
     size: Float,
+    simulatePressureWithSizeSlider: Boolean,
     onDocChange: (DocumentEntity, committed: Boolean) -> Unit,
 ) {
     val notebook = doc.blank ?: BlankNotebook()
@@ -59,6 +60,7 @@ fun BlankNotebookEditor(
                     tool = tool,
                     colorArgb = colorArgb,
                     size = size,
+                    simulatePressureWithSizeSlider = simulatePressureWithSizeSlider,
                     onStrokesChange = { updatedStrokes, committed ->
                         val px = pageSizeState.value
                         val updatedPages = notebook.pages.toMutableList()

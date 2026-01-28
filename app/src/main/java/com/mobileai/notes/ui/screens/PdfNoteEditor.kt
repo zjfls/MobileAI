@@ -39,6 +39,7 @@ fun PdfNoteEditor(
     tool: ToolKind,
     colorArgb: Long,
     size: Float,
+    simulatePressureWithSizeSlider: Boolean,
     onDocChange: (DocumentEntity, committed: Boolean) -> Unit,
 ) {
     val pdf = doc.pdf ?: return
@@ -105,6 +106,7 @@ fun PdfNoteEditor(
                             tool = tool,
                             colorArgb = colorArgb,
                             size = size,
+                            simulatePressureWithSizeSlider = simulatePressureWithSizeSlider,
                             onStrokesChange = { updatedStrokes, committed ->
                                 val updatedPdf = setPageStrokes(
                                     pdf,

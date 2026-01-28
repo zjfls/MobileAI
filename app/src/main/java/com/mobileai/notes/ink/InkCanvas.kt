@@ -36,16 +36,21 @@ fun InkCanvas(
     tool: ToolKind,
     colorArgb: Long,
     size: Float,
+    simulatePressureWithSizeSlider: Boolean = false,
     onStrokesChange: (List<StrokeDto>, committed: Boolean) -> Unit,
 ) {
     val renderer = remember { CanvasStrokeRenderer.create() }
-    val brush = remember(tool, colorArgb, size) {
-        InkInterop.brushFor(tool, colorArgb.toInt(), size)
+    val brushSize = remember(tool, size, simulatePressureWithSizeSlider) {
+        if (simulatePressureWithSizeSlider) baseBrushSizeForTool(tool) else size
+    }
+    val brush = remember(tool, colorArgb, brushSize) {
+        InkInterop.brushFor(tool, colorArgb.toInt(), brushSize)
     }
     val latestStrokes by rememberUpdatedState(strokes)
     val latestTool by rememberUpdatedState(tool)
     val latestIsEraser by rememberUpdatedState(isEraser)
     val latestSize by rememberUpdatedState(size)
+    val latestSimulatePressure by rememberUpdatedState(simulatePressureWithSizeSlider)
     val latestOnStrokesChange by rememberUpdatedState(onStrokesChange)
     val latestBrush by rememberUpdatedState(brush)
 
@@ -62,7 +67,11 @@ fun InkCanvas(
             val toolType = runCatching { event.getToolType(0) }.getOrNull() ?: MotionEvent.TOOL_TYPE_UNKNOWN
             val isStylus = toolType == MotionEvent.TOOL_TYPE_STYLUS
             val isStylusEraser = toolType == MotionEvent.TOOL_TYPE_ERASER
-            if (!isStylus && !isStylusEraser) {
+            val allowNonStylusInk = latestSimulatePressure && !latestIsEraser
+            if (allowNonStylusInk && !isStylus && !isStylusEraser && event.pointerCount > 1) {
+                return@pointerInteropFilter false
+            }
+            if (!isStylus && !isStylusEraser && !allowNonStylusInk) {
                 hoverPosition = null
                 eraserPosition = null
                 // Palm rejection: when stylus is down, swallow touch.
@@ -119,25 +128,48 @@ fun InkCanvas(
             runCatching { predictor?.record(event) }
 
             val pointerId = event.getPointerId(event.actionIndex.coerceAtLeast(0))
+            val syntheticPressure =
+                if (allowNonStylusInk && !isStylus) pressureFromSizeSlider(latestSize) else null
+
+            fun eventForInk(original: MotionEvent): MotionEvent {
+                if (syntheticPressure == null) return original
+                return toSinglePointerEvent(
+                    event = original,
+                    pointerIndex = original.actionIndex.coerceAtLeast(0),
+                    toolTypeOverride = MotionEvent.TOOL_TYPE_STYLUS,
+                    pressureOverride = syntheticPressure,
+                ) ?: original
+            }
+
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                     // Lower latency.
-                    view.requestUnbufferedDispatch(event)
-                    view.startStroke(event, pointerId, latestBrush)
+                    val e = eventForInk(event)
+                    view.requestUnbufferedDispatch(e)
+                    view.startStroke(e, pointerId, latestBrush)
+                    if (e !== event) e.recycle()
                     stylusDown = true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val predicted = runCatching { predictor?.predict() }.getOrNull()
-                    view.addToStroke(event, pointerId, predicted)
+                    val e = eventForInk(event)
+                    val p = predicted?.let { eventForInk(it) } ?: predicted
+                    view.addToStroke(e, pointerId, p)
+                    if (e !== event) e.recycle()
+                    if (p != null && p !== predicted) p.recycle()
                     predicted?.recycle()
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
-                    view.finishStroke(event, pointerId)
+                    val e = eventForInk(event)
+                    view.finishStroke(e, pointerId)
+                    if (e !== event) e.recycle()
                     stylusDown = false
                 }
                 MotionEvent.ACTION_CANCEL -> {
                     // Best-effort.
-                    runCatching { view.finishStroke(event, pointerId) }
+                    val e = eventForInk(event)
+                    runCatching { view.finishStroke(e, pointerId) }
+                    if (e !== event) e.recycle()
                     stylusDown = false
                 }
             }
@@ -216,4 +248,71 @@ fun InkCanvas(
             onDispose { currentInProgressView.removeFinishedStrokesListener(listener) }
         }
     }
+}
+
+private fun baseBrushSizeForTool(tool: ToolKind): Float {
+    return when (tool) {
+        ToolKind.PEN -> 10f
+        ToolKind.PENCIL -> 12f
+        ToolKind.HIGHLIGHTER -> 18f
+    }
+}
+
+private fun pressureFromSizeSlider(size: Float): Float {
+    val clamped = size.coerceIn(2f, 22f)
+    val t = (clamped - 2f) / 20f
+    return (0.15f + 0.85f * t).coerceIn(0.05f, 1.0f)
+}
+
+private fun toSinglePointerEvent(
+    event: MotionEvent,
+    pointerIndex: Int,
+    toolTypeOverride: Int?,
+    pressureOverride: Float?,
+): MotionEvent? {
+    if (pointerIndex !in 0 until event.pointerCount) return null
+
+    val originalAction = event.actionMasked
+    val action = when (originalAction) {
+        MotionEvent.ACTION_POINTER_DOWN -> MotionEvent.ACTION_DOWN
+        MotionEvent.ACTION_POINTER_UP -> MotionEvent.ACTION_UP
+        else -> originalAction
+    }
+
+    val props = MotionEvent.PointerProperties()
+    event.getPointerProperties(pointerIndex, props)
+    if (toolTypeOverride != null) props.toolType = toolTypeOverride
+
+    val coords = MotionEvent.PointerCoords()
+    event.getPointerCoords(pointerIndex, coords)
+    if (pressureOverride != null) coords.pressure = pressureOverride
+
+    val out =
+        MotionEvent.obtain(
+            event.downTime,
+            event.eventTime,
+            action,
+            1,
+            arrayOf(props),
+            arrayOf(coords),
+            event.metaState,
+            event.buttonState,
+            event.xPrecision,
+            event.yPrecision,
+            event.deviceId,
+            event.edgeFlags,
+            event.source,
+            event.flags,
+        )
+
+    // Preserve history for smoother curves, but normalize pressure.
+    if (event.historySize > 0) {
+        for (h in 0 until event.historySize) {
+            val hc = MotionEvent.PointerCoords()
+            event.getHistoricalPointerCoords(pointerIndex, h, hc)
+            if (pressureOverride != null) hc.pressure = pressureOverride
+            out.addBatch(event.getHistoricalEventTime(h), arrayOf(hc), event.metaState)
+        }
+    }
+    return out
 }
