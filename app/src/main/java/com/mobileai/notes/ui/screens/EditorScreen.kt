@@ -74,7 +74,7 @@ fun EditorScreen(
     val isEraserState = remember { mutableStateOf(false) }
     val colorArgbState = remember { mutableLongStateOf(0xFF111111) }
     val sizeState = remember { mutableFloatStateOf(6f) }
-    var simulatePressureWithSizeSlider by remember { mutableStateOf(false) }
+    var simulatePressureWithSizeSlider by remember { mutableStateOf(true) }
 
     var overflowExpanded by remember { mutableStateOf(false) }
     var renameDialogOpen by remember { mutableStateOf(false) }

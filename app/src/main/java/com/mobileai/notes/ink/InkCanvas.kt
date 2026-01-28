@@ -40,11 +40,11 @@ fun InkCanvas(
     onStrokesChange: (List<StrokeDto>, committed: Boolean) -> Unit,
 ) {
     val renderer = remember { CanvasStrokeRenderer.create() }
-    val brushSize = remember(tool, size, simulatePressureWithSizeSlider) {
-        if (simulatePressureWithSizeSlider) baseBrushSizeForTool(tool) else size
+    val stylusBrush = remember(tool, colorArgb, size) {
+        InkInterop.brushFor(tool, colorArgb.toInt(), size)
     }
-    val brush = remember(tool, colorArgb, brushSize) {
-        InkInterop.brushFor(tool, colorArgb.toInt(), brushSize)
+    val simulatedBrush = remember(tool, colorArgb) {
+        InkInterop.brushFor(tool, colorArgb.toInt(), baseBrushSizeForTool(tool))
     }
     val latestStrokes by rememberUpdatedState(strokes)
     val latestTool by rememberUpdatedState(tool)
@@ -52,7 +52,8 @@ fun InkCanvas(
     val latestSize by rememberUpdatedState(size)
     val latestSimulatePressure by rememberUpdatedState(simulatePressureWithSizeSlider)
     val latestOnStrokesChange by rememberUpdatedState(onStrokesChange)
-    val latestBrush by rememberUpdatedState(brush)
+    val latestStylusBrush by rememberUpdatedState(stylusBrush)
+    val latestSimulatedBrush by rememberUpdatedState(simulatedBrush)
 
     var hoverPosition by remember { mutableStateOf<Offset?>(null) }
     var eraserPosition by remember { mutableStateOf<Offset?>(null) }
@@ -130,6 +131,7 @@ fun InkCanvas(
             val pointerId = event.getPointerId(event.actionIndex.coerceAtLeast(0))
             val syntheticPressure =
                 if (allowNonStylusInk && !isStylus) pressureFromSizeSlider(latestSize) else null
+            val brushForThisEvent = if (syntheticPressure != null) latestSimulatedBrush else latestStylusBrush
 
             fun eventForInk(original: MotionEvent): MotionEvent {
                 if (syntheticPressure == null) return original
@@ -146,7 +148,7 @@ fun InkCanvas(
                     // Lower latency.
                     val e = eventForInk(event)
                     view.requestUnbufferedDispatch(e)
-                    view.startStroke(e, pointerId, latestBrush)
+                    view.startStroke(e, pointerId, brushForThisEvent)
                     if (e !== event) e.recycle()
                     stylusDown = true
                 }
