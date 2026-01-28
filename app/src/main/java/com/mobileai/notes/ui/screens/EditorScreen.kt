@@ -1,8 +1,11 @@
 package com.mobileai.notes.ui.screens
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import com.mobileai.notes.data.DocumentEntity
 import com.mobileai.notes.data.DocumentStore
@@ -35,6 +39,8 @@ import com.mobileai.notes.data.DocumentType
 import com.mobileai.notes.data.NotebookPage
 import com.mobileai.notes.data.PageTemplate
 import com.mobileai.notes.data.ToolKind
+import com.mobileai.notes.data.WorksheetNote
+import com.mobileai.notes.data.WorksheetPage
 import com.mobileai.notes.export.ExportManager
 import com.mobileai.notes.oppo.OppoPenKit
 import com.mobileai.notes.ui.widgets.ToolBar
@@ -178,7 +184,7 @@ fun EditorScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("切换模板：空白/横线/方格") },
+                                text = { Text("切换模板：空白/横线/方格/点阵/Cornell") },
                                 onClick = {
                                     overflowExpanded = false
                                     val current = doc ?: return@DropdownMenuItem
@@ -186,9 +192,57 @@ fun EditorScreen(
                                     val next = when (blank.template) {
                                         PageTemplate.BLANK -> PageTemplate.RULED
                                         PageTemplate.RULED -> PageTemplate.GRID
-                                        PageTemplate.GRID -> PageTemplate.BLANK
+                                        PageTemplate.GRID -> PageTemplate.DOTS
+                                        PageTemplate.DOTS -> PageTemplate.CORNELL
+                                        PageTemplate.CORNELL -> PageTemplate.BLANK
                                     }
                                     val updated = current.copy(blank = blank.copy(template = next))
+                                    docState.value = updated
+                                    scope.launch { store.saveDocument(updated) }
+                                },
+                            )
+                        }
+                        if (doc?.type == DocumentType.WORKSHEET) {
+                            DropdownMenuItem(
+                                text = { Text("新增页面") },
+                                onClick = {
+                                    overflowExpanded = false
+                                    val current = doc ?: return@DropdownMenuItem
+                                    val ws = current.worksheet ?: WorksheetNote()
+                                    val updated = current.copy(
+                                        worksheet = ws.copy(pages = ws.pages + WorksheetPage(id = java.util.UUID.randomUUID().toString())),
+                                    )
+                                    docState.value = updated
+                                    scope.launch { store.saveDocument(updated) }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("删除最后一页") },
+                                enabled = (doc?.worksheet?.pages?.size ?: 0) > 1,
+                                onClick = {
+                                    overflowExpanded = false
+                                    val current = doc ?: return@DropdownMenuItem
+                                    val ws = current.worksheet ?: WorksheetNote()
+                                    if (ws.pages.size <= 1) return@DropdownMenuItem
+                                    val updated = current.copy(worksheet = ws.copy(pages = ws.pages.dropLast(1)))
+                                    docState.value = updated
+                                    scope.launch { store.saveDocument(updated) }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("切换模板：空白/横线/方格/点阵/Cornell") },
+                                onClick = {
+                                    overflowExpanded = false
+                                    val current = doc ?: return@DropdownMenuItem
+                                    val ws = current.worksheet ?: WorksheetNote()
+                                    val next = when (ws.template) {
+                                        PageTemplate.BLANK -> PageTemplate.RULED
+                                        PageTemplate.RULED -> PageTemplate.GRID
+                                        PageTemplate.GRID -> PageTemplate.DOTS
+                                        PageTemplate.DOTS -> PageTemplate.CORNELL
+                                        PageTemplate.CORNELL -> PageTemplate.BLANK
+                                    }
+                                    val updated = current.copy(worksheet = ws.copy(template = next))
                                     docState.value = updated
                                     scope.launch { store.saveDocument(updated) }
                                 },
@@ -254,34 +308,40 @@ fun EditorScreen(
             )
         },
         bottomBar = {
-            ToolBar(
-                tool = toolKindState.value,
-                isEraser = isEraserState.value,
-                colorArgb = colorArgbState.longValue,
-                size = sizeState.floatValue,
-                canUndo = undoStack.isNotEmpty(),
-                canRedo = redoStack.isNotEmpty(),
-                onUndo = {
-                    val current = docState.value ?: return@ToolBar
-                    if (undoStack.isEmpty()) return@ToolBar
-                    val prev = undoStack.removeLast()
-                    redoStack.addLast(current)
-                    docState.value = prev
-                    scope.launch { store.saveDocument(prev) }
-                },
-                onRedo = {
-                    val current = docState.value ?: return@ToolBar
-                    if (redoStack.isEmpty()) return@ToolBar
-                    val next = redoStack.removeLast()
-                    undoStack.addLast(current)
-                    docState.value = next
-                    scope.launch { store.saveDocument(next) }
-                },
-                onToolChange = { toolKindState.value = it; isEraserState.value = false },
-                onEraser = { isEraserState.value = true },
-                onColorChange = { colorArgbState.longValue = it },
-                onSizeChange = { sizeState.floatValue = it },
-            )
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                ToolBar(
+                    modifier = Modifier.widthIn(max = 920.dp),
+                    tool = toolKindState.value,
+                    isEraser = isEraserState.value,
+                    colorArgb = colorArgbState.longValue,
+                    size = sizeState.floatValue,
+                    canUndo = undoStack.isNotEmpty(),
+                    canRedo = redoStack.isNotEmpty(),
+                    onUndo = {
+                        val current = docState.value ?: return@ToolBar
+                        if (undoStack.isEmpty()) return@ToolBar
+                        val prev = undoStack.removeLast()
+                        redoStack.addLast(current)
+                        docState.value = prev
+                        scope.launch { store.saveDocument(prev) }
+                    },
+                    onRedo = {
+                        val current = docState.value ?: return@ToolBar
+                        if (redoStack.isEmpty()) return@ToolBar
+                        val next = redoStack.removeLast()
+                        undoStack.addLast(current)
+                        docState.value = next
+                        scope.launch { store.saveDocument(next) }
+                    },
+                    onToolChange = { toolKindState.value = it; isEraserState.value = false },
+                    onEraser = { isEraserState.value = true },
+                    onColorChange = { colorArgbState.longValue = it },
+                    onSizeChange = { sizeState.floatValue = it },
+                )
+            }
         },
     ) { paddingValues ->
         Column(
@@ -341,6 +401,36 @@ fun EditorScreen(
                             docState.value = updated
                             scope.launch { store.saveDocument(updated) }
                             return@PdfNoteEditor
+                        }
+                        docState.value = updated
+                        pendingSaveJob?.cancel()
+                        pendingSaveJob = scope.launch {
+                            delay(300)
+                            store.saveDocument(updated)
+                        }
+                    },
+                )
+            }
+            DocumentType.WORKSHEET -> {
+                WorksheetEditor(
+                    doc = doc,
+                    isEraser = isEraserState.value,
+                    tool = toolKindState.value,
+                    colorArgb = colorArgbState.longValue,
+                    size = sizeState.floatValue,
+                    simulatePressureWithSizeSlider = simulatePressureWithSizeSlider,
+                    onDocChange = { updated, committed ->
+                        if (committed) {
+                            docState.value?.let { current ->
+                                undoStack.addLast(current)
+                                while (undoStack.size > 30) undoStack.removeFirst()
+                                redoStack.clear()
+                            }
+                            pendingSaveJob?.cancel()
+                            pendingSaveJob = null
+                            docState.value = updated
+                            scope.launch { store.saveDocument(updated) }
+                            return@WorksheetEditor
                         }
                         docState.value = updated
                         pendingSaveJob?.cancel()

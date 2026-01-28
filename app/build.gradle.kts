@@ -68,6 +68,10 @@ dependencies {
     // Serialization / persistence
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // Networking (host / AI bridge)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Motion prediction (optional, standard AndroidX)
     implementation("androidx.input:input-motionprediction:1.0.0")

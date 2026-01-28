@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 enum class DocumentType {
     BLANK,
     PDF,
+    WORKSHEET,
 }
 
 @Serializable
@@ -34,6 +35,9 @@ data class DocumentEntity(
 
     @SerialName("pdf")
     val pdf: PdfNote? = null,
+
+    @SerialName("worksheet")
+    val worksheet: WorksheetNote? = null,
 )
 
 @Serializable
@@ -54,6 +58,8 @@ enum class PageTemplate {
     BLANK,
     RULED,
     GRID,
+    DOTS,
+    CORNELL,
 }
 
 @Serializable
@@ -61,6 +67,22 @@ data class PdfNote(
     val pdfUri: String,
     val pageCount: Int,
     val pages: List<PdfPageAnnotations> = emptyList(),
+)
+
+@Serializable
+data class WorksheetNote(
+    val pages: List<WorksheetPage> = listOf(WorksheetPage()),
+    val template: PageTemplate = PageTemplate.RULED,
+)
+
+@Serializable
+data class WorksheetPage(
+    val id: String = "p1",
+    val title: String? = null,
+    val backgroundImageUri: String? = null,
+    val strokes: List<StrokeDto> = emptyList(),
+    val canvasWidthPx: Int = 0,
+    val canvasHeightPx: Int = 0,
 )
 
 @Serializable

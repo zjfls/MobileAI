@@ -3,6 +3,7 @@ package com.mobileai.notes.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,17 +12,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.AlertDialog
@@ -41,6 +48,10 @@ import com.mobileai.notes.data.DocumentType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.NoteAdd
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.TextButton
 
@@ -79,7 +90,18 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("MobileAI Notes") })
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Aura Note", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "AI 手写笔记 · 试卷 · 批注",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+            )
         },
     ) { paddingValues ->
         Column(
@@ -88,6 +110,52 @@ fun HomeScreen(
                 .padding(paddingValues)
                 .padding(16.dp),
         ) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.extraLarge,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        modifier = Modifier.size(44.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        shape = MaterialTheme.shapes.large,
+                        shadowElevation = 10.dp,
+                    ) {
+                        Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
+                            Icon(Icons.Filled.AutoAwesome, contentDescription = null)
+                        }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("开始创作", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "用笔写 · 用 AI 出题/讲解 · 一键同步",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                val id = store.createWorksheet(title = "AI 试卷")
+                                onOpenDocument(id)
+                            }
+                        },
+                    ) {
+                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("AI 生成试卷")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
                     onClick = {
@@ -97,53 +165,115 @@ fun HomeScreen(
                         }
                     },
                 ) {
-                    Text("新建空白笔记")
+                    Icon(Icons.Filled.NoteAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("空白笔记")
                 }
                 Button(
-                    onClick = {
-                        openPdfLauncher.launch(arrayOf("application/pdf"))
-                    },
+                    onClick = { openPdfLauncher.launch(arrayOf("application/pdf")) },
                 ) {
+                    Icon(Icons.Filled.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
                     Text("导入 PDF")
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             Text("最近", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 240.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                items(documents, key = { it.id }) { doc ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenDocument(doc.id) },
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    if (documents.isEmpty()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = MaterialTheme.shapes.extraLarge,
+                            tonalElevation = 1.dp,
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(doc.title, style = MaterialTheme.typography.titleMedium)
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Icon(Icons.Filled.Description, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
-                                    when (doc.type) {
-                                        DocumentType.BLANK -> "空白笔记"
-                                        DocumentType.PDF -> "PDF 批注"
-                                    },
+                                    "还没有文档：试试右上角新建或导入",
                                     style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            DocumentOverflowMenu(
-                                onRename = {
-                                    renameTargetId = doc.id
-                                    renameInitialTitle = doc.title
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
+
+                items(documents, key = { it.id }) { doc ->
+                    ElevatedCard(
+                        onClick = { onOpenDocument(doc.id) },
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Surface(
+                                        modifier = Modifier.size(36.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                        contentColor = MaterialTheme.colorScheme.primary,
+                                        shape = MaterialTheme.shapes.large,
+                                    ) {
+                                        Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
+                                            val icon =
+                                                when (doc.type) {
+                                                    DocumentType.BLANK -> Icons.Filled.NoteAdd
+                                                    DocumentType.PDF -> Icons.Filled.PictureAsPdf
+                                                    DocumentType.WORKSHEET -> Icons.Filled.AutoAwesome
+                                                }
+                                            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                    Text(
+                                        when (doc.type) {
+                                            DocumentType.BLANK -> "笔记"
+                                            DocumentType.PDF -> "PDF"
+                                            DocumentType.WORKSHEET -> "试卷"
+                                        },
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                DocumentOverflowMenu(
+                                    onRename = {
+                                        renameTargetId = doc.id
+                                        renameInitialTitle = doc.title
+                                    },
+                                    onDelete = { scope.launch(Dispatchers.IO) { store.deleteDocument(doc.id) } },
+                                )
+                            }
+                            Text(
+                                doc.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                when (doc.type) {
+                                    DocumentType.BLANK -> "空白画布 · 多页 · 模板"
+                                    DocumentType.PDF -> "阅读 · 批注 · 导出"
+                                    DocumentType.WORKSHEET -> "拉题 · 作答 · AI 解答 · 同步"
                                 },
-                                onDelete = {
-                                    scope.launch(Dispatchers.IO) { store.deleteDocument(doc.id) }
-                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }

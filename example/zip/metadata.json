@@ -1,0 +1,7 @@
+
+{
+  "description": "Aura Note - A high-end AI powered handwritten note and exercise app.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

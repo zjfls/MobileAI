@@ -1,6 +1,5 @@
 package com.mobileai.notes.ui.screens
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,16 +13,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.mobileai.notes.data.BlankNotebook
 import com.mobileai.notes.data.DocumentEntity
-import com.mobileai.notes.data.PageTemplate
 import com.mobileai.notes.data.ToolKind
 import com.mobileai.notes.ink.InkCanvas
+import com.mobileai.notes.ui.widgets.PageTemplateBackground
 
 @Composable
 fun BlankNotebookEditor(
@@ -77,51 +74,6 @@ fun BlankNotebookEditor(
                         )
                     },
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PageTemplateBackground(template: PageTemplate) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        when (template) {
-            PageTemplate.BLANK -> Unit
-            PageTemplate.RULED -> {
-                val gap = 32.dp.toPx()
-                var y = gap
-                while (y < size.height) {
-                    drawLine(
-                        color = Color(0x22000000),
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = 1.dp.toPx(),
-                    )
-                    y += gap
-                }
-            }
-            PageTemplate.GRID -> {
-                val gap = 32.dp.toPx()
-                var x = gap
-                while (x < size.width) {
-                    drawLine(
-                        color = Color(0x16000000),
-                        start = Offset(x, 0f),
-                        end = Offset(x, size.height),
-                        strokeWidth = 1.dp.toPx(),
-                    )
-                    x += gap
-                }
-                var y = gap
-                while (y < size.height) {
-                    drawLine(
-                        color = Color(0x16000000),
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = 1.dp.toPx(),
-                    )
-                    y += gap
-                }
             }
         }
     }

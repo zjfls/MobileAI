@@ -95,6 +95,28 @@ class DocumentStore private constructor(
         id
     }
 
+    suspend fun createWorksheet(title: String = "AI 试卷"): String = withContext(Dispatchers.IO) {
+        val id = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val doc = DocumentEntity(
+            id = id,
+            type = DocumentType.WORKSHEET,
+            title = title,
+            updatedAtEpochMillis = now,
+            worksheet = WorksheetNote(),
+        )
+        writeDocument(doc)
+        upsertSummary(
+            DocumentSummary(
+                id = id,
+                type = DocumentType.WORKSHEET,
+                title = title,
+                updatedAtEpochMillis = now,
+            ),
+        )
+        id
+    }
+
     suspend fun loadDocument(id: String): DocumentEntity? = withContext(Dispatchers.IO) {
         val file = File(documentsDir, "$id.json")
         if (!file.exists()) return@withContext null

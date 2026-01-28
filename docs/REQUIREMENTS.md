@@ -64,6 +64,7 @@
 
 - 新建：空白笔记（默认 1 页）
 - 导入：PDF（SAF 选取文档）
+- 新建：AI 试卷（题目图片页 + 手写作答）
 - 最近：最近打开列表（包含空白笔记与 PDF）
 - 重命名/删除
 
@@ -86,7 +87,7 @@
 ### 4.3 空白画布笔记
 
 - 多页：新增/删除页；缩略图快速跳转（可先用列表替代）
-- 模板：空白/横线/方格（渲染背景）
+- 模板：空白/横线/方格/点阵/DOTs/Cornell（渲染背景）
 - 导出：
   - 导出 PDF（将每页渲染为图片并生成 PDF；保留矢量非必需）
   - 导出 PNG（单页）
@@ -101,7 +102,24 @@
   - 批注覆盖在 PDF 上方（不破坏原 PDF）
   - 支持导出“带批注的 PDF”（可通过重新渲染合成实现）
 
-### 4.5 OPPO Pencil 增强（可选）
+### 4.5 AI 试卷 / 做题（亮点）
+
+目标：把“题目图片 + 手写作答 + AI 解答 + 同步”整合成一条闭环。
+
+- Host 连接：
+  - 配置 `baseUrl`（例如 `https://api.mock-edu.com`）
+  - 支持保存/复用
+- 拉题成卷：
+  - `GET {baseUrl}/questions` 获取题目列表（支持 `imageUrl` 或 `imageBase64`）
+  - 每道题生成一页：题目图片做页面底图，Ink 画布覆盖其上
+- AI 出题成卷：
+  - `POST {baseUrl}/papers/generate`（prompt + count）返回题目列表（同上）
+- AI 解答：
+  - `POST {baseUrl}/ai/solve`（上传该页合成 PNG）返回解答文本
+- 同步到 Host：
+  - `POST {baseUrl}/pages/upload`（上传该页合成 PNG + pageIndex + paperId）
+
+### 4.6 OPPO Pencil 增强（可选）
 
 - 鉴权与连接状态展示（可在调试页）
 - 震动反馈：
@@ -145,6 +163,7 @@
 - Document
   - `BlankNotebook`：pages[]，每页 strokes[]
   - `PdfNote`：pdfUri，pageCount，perPageStrokes[pageIndex][]
+  - `WorksheetNote`：pages[]（每页可带题目图片作为底图），template
 - Stroke（持久化存储）
   - tool（pen/pencil/highlighter）
   - colorArgb、size

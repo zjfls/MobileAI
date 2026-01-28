@@ -1,17 +1,29 @@
 package com.mobileai.notes.ui.widgets
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
@@ -26,10 +38,26 @@ import com.mobileai.notes.data.ToolKind
 import com.mobileai.notes.oppo.OppoPenKit
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.BorderColor
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.BorderColor
+import androidx.compose.material.icons.outlined.Brush
+import androidx.compose.material.icons.outlined.Create
+import androidx.compose.material.icons.outlined.Redo
+import androidx.compose.material.icons.outlined.Undo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ToolBar(
+    modifier: Modifier = Modifier,
     tool: ToolKind,
     isEraser: Boolean,
     colorArgb: Long,
@@ -47,67 +75,98 @@ fun ToolBar(
     var customColorOpen by remember { mutableStateOf(false) }
     var customColorText by remember { mutableStateOf("FF111111") }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(scrollState)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        tonalElevation = 2.dp,
+        shadowElevation = 10.dp,
+        shape = MaterialTheme.shapes.extraLarge,
     ) {
-        Button(onClick = onUndo, enabled = canUndo) { Text("撤销") }
-        Button(onClick = onRedo, enabled = canRedo) { Text("重做") }
+        Row(
+            modifier = Modifier
+                .horizontalScroll(scrollState)
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            FilledTonalIconButton(onClick = onUndo, enabled = canUndo) {
+                Icon(Icons.Outlined.Undo, contentDescription = "撤销")
+            }
+            FilledTonalIconButton(onClick = onRedo, enabled = canRedo) {
+                Icon(Icons.Outlined.Redo, contentDescription = "重做")
+            }
 
-        ToolButton(
-            label = "钢笔",
-            selected = !isEraser && tool == ToolKind.PEN,
-            onClick = {
-                OppoPenKit.tryToolSwitchVibration(isEraser = false)
-                onToolChange(ToolKind.PEN)
-            },
-        )
-        ToolButton(
-            label = "铅笔",
-            selected = !isEraser && tool == ToolKind.PENCIL,
-            onClick = {
-                OppoPenKit.tryToolSwitchVibration(isEraser = false)
-                onToolChange(ToolKind.PENCIL)
-            },
-        )
-        ToolButton(
-            label = "荧光笔",
-            selected = !isEraser && tool == ToolKind.HIGHLIGHTER,
-            onClick = {
-                OppoPenKit.tryToolSwitchVibration(isEraser = false)
-                onToolChange(ToolKind.HIGHLIGHTER)
-            },
-        )
-        ToolButton(
-            label = "橡皮",
-            selected = isEraser,
-            onClick = {
-                OppoPenKit.tryToolSwitchVibration(isEraser = true)
-                onEraser()
-            },
-        )
+            VerticalDivider()
 
-        Spacer(Modifier.width(6.dp))
+            ToolIconButton(
+                selected = !isEraser && tool == ToolKind.PEN,
+                iconSelected = Icons.Filled.Create,
+                icon = Icons.Outlined.Create,
+                label = "钢笔",
+                onClick = {
+                    OppoPenKit.tryToolSwitchVibration(isEraser = false)
+                    onToolChange(ToolKind.PEN)
+                },
+            )
+            ToolIconButton(
+                selected = !isEraser && tool == ToolKind.PENCIL,
+                iconSelected = Icons.Filled.BorderColor,
+                icon = Icons.Outlined.BorderColor,
+                label = "铅笔",
+                onClick = {
+                    OppoPenKit.tryToolSwitchVibration(isEraser = false)
+                    onToolChange(ToolKind.PENCIL)
+                },
+            )
+            ToolIconButton(
+                selected = !isEraser && tool == ToolKind.HIGHLIGHTER,
+                iconSelected = Icons.Filled.AutoFixHigh,
+                icon = Icons.Outlined.AutoFixHigh,
+                label = "荧光笔",
+                onClick = {
+                    OppoPenKit.tryToolSwitchVibration(isEraser = false)
+                    onToolChange(ToolKind.HIGHLIGHTER)
+                },
+            )
+            ToolIconButton(
+                selected = isEraser,
+                iconSelected = Icons.Filled.Brush,
+                icon = Icons.Outlined.Brush,
+                label = "橡皮",
+                onClick = {
+                    OppoPenKit.tryToolSwitchVibration(isEraser = true)
+                    onEraser()
+                },
+            )
 
-        ColorButton(0xFF111111, colorArgb, onColorChange)
-        ColorButton(0xFF1976D2, colorArgb, onColorChange)
-        ColorButton(0xFFD32F2F, colorArgb, onColorChange)
-        ColorButton(0xFF388E3C, colorArgb, onColorChange)
-        ColorButton(0xFFFFC107, colorArgb, onColorChange)
-        Button(onClick = { customColorOpen = true }) { Text("自定义色") }
+            VerticalDivider()
 
-        Spacer(Modifier.width(8.dp))
+            ColorDot(0xFF111111, colorArgb, onColorChange)
+            ColorDot(0xFF2563EB, colorArgb, onColorChange)
+            ColorDot(0xFFDC2626, colorArgb, onColorChange)
+            ColorDot(0xFF16A34A, colorArgb, onColorChange)
+            ColorDot(0xFF9333EA, colorArgb, onColorChange)
+            ColorDot(0xFFF59E0B, colorArgb, onColorChange)
+            OutlinedButton(
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                onClick = { customColorOpen = true },
+            ) { Text("自定义色") }
 
-        Slider(
-            value = size,
-            onValueChange = onSizeChange,
-            valueRange = 2f..22f,
-            modifier = Modifier.width(180.dp),
-        )
-        Text("粗细: ${size.toInt()}")
+            VerticalDivider()
+
+            Column(modifier = Modifier.width(200.dp)) {
+                Slider(
+                    value = size,
+                    onValueChange = onSizeChange,
+                    valueRange = 2f..22f,
+                )
+                Text(
+                    text = "粗细 ${size.toInt()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
+        }
     }
 
     if (customColorOpen) {
@@ -149,37 +208,52 @@ fun ToolBar(
 }
 
 @Composable
-private fun ToolButton(
-    label: String,
+private fun ToolIconButton(
     selected: Boolean,
+    iconSelected: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
     onClick: () -> Unit,
 ) {
-    Button(
-        onClick = onClick,
-        colors = if (selected) {
-            ButtonDefaults.buttonColors(containerColor = Color(0xFF111111), contentColor = Color.White)
-        } else {
-            ButtonDefaults.buttonColors()
-        },
-    ) {
-        Text(label)
+    if (selected) {
+        FilledIconButton(onClick = onClick) {
+            Icon(iconSelected, contentDescription = label)
+        }
+    } else {
+        FilledTonalIconButton(onClick = onClick) {
+            Icon(icon, contentDescription = label)
+        }
     }
 }
 
 @Composable
-private fun ColorButton(
+private fun ColorDot(
     color: Long,
     current: Long,
     onColorChange: (Long) -> Unit,
 ) {
     val selected = color == current
-    Button(
-        onClick = { onColorChange(color) },
-        colors = ButtonDefaults.buttonColors(
-            containerColor = Color(color),
-            contentColor = if (selected) Color.White else Color.Transparent,
-        ),
-    ) {
-        Text(if (selected) "✓" else " ")
-    }
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .border(
+                width = if (selected) 2.dp else 0.dp,
+                color = if (selected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                shape = CircleShape,
+            )
+            .background(Color(color))
+            .clickable { onColorChange(color) },
+    )
+}
+
+@Composable
+private fun VerticalDivider() {
+    Spacer(
+        modifier = Modifier
+            .width(1.dp)
+            .height(28.dp)
+            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.8f)),
+    )
+    Spacer(Modifier.width(2.dp))
 }
