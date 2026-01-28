@@ -106,16 +106,29 @@
 
 目标：把“题目图片 + 手写作答 + AI 解答 + 同步”整合成一条闭环。
 
+#### 4.5.1 LLM 直连（必做，不依赖 Host）
+
+- AI 设置（支持多个配置）：
+  - Providers：多个 `Base URL + API Key`（OpenAI-Compatible）
+  - Agents：多个（`Provider + model + system prompt + temperature + max_tokens`）
+  - 生题器：多个（引用一个 Agent，配置默认 `promptPreset + count`，可设置默认）
+  - 讲解器：多个（引用一个 Agent，配置默认 `style`，可设置默认）
+- AI 出题成卷（直连 LLM）：
+  - 从默认生题器读取 `promptPreset/count`（弹窗可覆盖）
+  - 调用 OpenAI-Compatible `/chat/completions`，返回题目 JSON
+  - 每道题生成一页：题干文本 +（可选）题目图片作为底图，Ink 画布覆盖其上
+- AI 解答（直连 LLM）：
+  - 从默认讲解器读取 `style`（可在弹窗覆盖）
+  - 上传该页合成 PNG（题目底图 + 笔迹）+ 题干文本给 LLM，请求讲解/纠错
+
+#### 4.5.2 Host 协议（可选：拉题/同步，不影响本地生题与讲解）
+
 - Host 连接：
   - 配置 `baseUrl`（例如 `https://api.mock-edu.com`）
   - 支持保存/复用
 - 拉题成卷：
   - `GET {baseUrl}/questions` 获取题目列表（支持 `imageUrl` 或 `imageBase64`）
   - 每道题生成一页：题目图片做页面底图，Ink 画布覆盖其上
-- AI 出题成卷：
-  - `POST {baseUrl}/papers/generate`（prompt + count）返回题目列表（同上）
-- AI 解答：
-  - `POST {baseUrl}/ai/solve`（上传该页合成 PNG）返回解答文本
 - 同步到 Host：
   - `POST {baseUrl}/pages/upload`（上传该页合成 PNG + pageIndex + paperId）
 
@@ -175,6 +188,7 @@
 - 局部擦除：同一笔画可被擦出缺口并分裂为多段；撤销可恢复
 - PDF 批注：每页批注与 PDF 对齐，翻页不串页
 - 崩溃恢复：强杀后重新打开仍能看到最近内容（至少最后一次自动保存）
+- AI 生题/讲解：无 Host 也可配置 LLM 并生成试卷/对作答讲解；支持多个 Provider/Agent/生题器/讲解器并可切换默认
 
 ## 9. 不做清单（V1 明确不做）
 

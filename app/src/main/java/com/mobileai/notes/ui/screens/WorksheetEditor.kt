@@ -108,9 +108,9 @@ fun WorksheetEditor(
     var aiDialogOpen by remember { mutableStateOf(false) }
     var aiDialogText by remember { mutableStateOf("") }
     var aiGenerateOpen by remember { mutableStateOf(false) }
-    var aiPrompt by remember { mutableStateOf(aiSettings.paperGenerator.promptPreset) }
-    var aiCount by remember { mutableStateOf(aiSettings.paperGenerator.count.toString()) }
-    var aiExplainExtra by remember { mutableStateOf(aiSettings.explainerSettings.style) }
+    var aiPrompt by remember { mutableStateOf("") }
+    var aiCount by remember { mutableStateOf("") }
+    var aiExplainExtra by remember { mutableStateOf("") }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // Sidebar
@@ -352,7 +352,15 @@ fun WorksheetEditor(
                                     ) { Icon(Icons.Filled.NavigateNext, contentDescription = "下一页") }
                                 }
                             }
-                            Button(onClick = { aiGenerateOpen = true }) {
+                            Button(onClick = {
+                                val generator =
+                                    aiSettings.paperGenerators.firstOrNull { it.id == aiSettings.defaultPaperGeneratorId && it.enabled }
+                                        ?: aiSettings.paperGenerators.firstOrNull { it.enabled }
+                                        ?: aiSettings.paperGenerators.firstOrNull()
+                                aiPrompt = generator?.promptPreset.orEmpty()
+                                aiCount = (generator?.count ?: 5).toString()
+                                aiGenerateOpen = true
+                            }) {
                                 Icon(Icons.Filled.AutoAwesome, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
                                 Text("AI Generate Paper")
@@ -360,25 +368,41 @@ fun WorksheetEditor(
                             FilledTonalButton(
                                 onClick = {
                                     scope.launch {
+                                        val explainer =
+                                            aiSettings.explainers.firstOrNull { it.id == aiSettings.defaultExplainerId && it.enabled }
+                                                ?: aiSettings.explainers.firstOrNull { it.enabled }
+                                                ?: aiSettings.explainers.firstOrNull()
+                                        if (explainer == null) {
+                                            snackbar.showSnackbar("请先在「AI 设置」里添加讲解器配置")
+                                            return@launch
+                                        }
+                                        val agent =
+                                            aiSettings.agents.firstOrNull { it.id == explainer.agentId && it.enabled }
+                                                ?: aiSettings.agents.firstOrNull { it.id == explainer.agentId }
+                                        if (agent == null || !agent.enabled) {
+                                            snackbar.showSnackbar("讲解器引用的 Agent 未配置或已关闭")
+                                            return@launch
+                                        }
+                                        aiExplainExtra = explainer.style
                                         val provider =
-                                            aiSettings.providers.firstOrNull { it.id == aiSettings.defaultProviderId }
-                                                ?: aiSettings.providers.firstOrNull()
-                                        if (provider == null || provider.apiKey.isBlank()) {
-                                            snackbar.showSnackbar("请先在「AI 设置」里配置 API Key")
+                                            aiSettings.providers.firstOrNull { it.id == agent.config.providerId }
+                                        if (provider == null || !provider.enabled || provider.apiKey.isBlank()) {
+                                            snackbar.showSnackbar("讲解器的 Provider 未配置或已关闭")
                                             return@launch
                                         }
                                         val idx = pageIndex
                                         val bytes =
                                             runCatching { ExportManager.renderWorksheetPagePngBytes(context, doc, idx) }.getOrNull()
                                         runCatching {
+                                            val style = (aiExplainExtra.takeIf { it.isNotBlank() } ?: explainer.style).trim()
                                             val answer =
                                                 aiAgents.explainPage(
                                                     providerBaseUrl = provider.baseUrl,
                                                     providerApiKey = provider.apiKey,
-                                                    agent = aiSettings.explainer,
+                                                    agent = agent.config,
                                                     questionText = currentPage?.questionText ?: currentPage?.title,
                                                     pagePngBytes = bytes,
-                                                    extraInstruction = aiExplainExtra,
+                                                    extraInstruction = style,
                                                 )
                                             aiDialogText = answer
                                             aiDialogOpen = true
@@ -455,19 +479,33 @@ fun WorksheetEditor(
                         val count = aiCount.toIntOrNull()?.coerceIn(1, 30) ?: 5
                         scope.launch {
                             runCatching {
+                                val generator =
+                                    aiSettings.paperGenerators.firstOrNull { it.id == aiSettings.defaultPaperGeneratorId && it.enabled }
+                                        ?: aiSettings.paperGenerators.firstOrNull { it.enabled }
+                                        ?: aiSettings.paperGenerators.firstOrNull()
+                                if (generator == null) {
+                                    snackbar.showSnackbar("请先在「AI 设置」里添加生题器配置")
+                                    return@launch
+                                }
+                                val agent =
+                                    aiSettings.agents.firstOrNull { it.id == generator.agentId && it.enabled }
+                                        ?: aiSettings.agents.firstOrNull { it.id == generator.agentId }
+                                if (agent == null || !agent.enabled) {
+                                    snackbar.showSnackbar("生题器引用的 Agent 未配置或已关闭")
+                                    return@launch
+                                }
                                 val provider =
-                                    aiSettings.providers.firstOrNull { it.id == aiSettings.defaultProviderId }
-                                        ?: aiSettings.providers.firstOrNull()
-                                if (provider == null || provider.apiKey.isBlank()) {
-                                    snackbar.showSnackbar("请先在「AI 设置」里配置 API Key")
+                                    aiSettings.providers.firstOrNull { it.id == agent.config.providerId }
+                                if (provider == null || !provider.enabled || provider.apiKey.isBlank()) {
+                                    snackbar.showSnackbar("生题器的 Provider 未配置或已关闭")
                                     return@launch
                                 }
                                 val generated =
                                     aiAgents.generatePaper(
                                         providerBaseUrl = provider.baseUrl,
                                         providerApiKey = provider.apiKey,
-                                        agent = aiSettings.generator,
-                                        userPrompt = aiPrompt,
+                                        agent = agent.config,
+                                        userPrompt = aiPrompt.ifBlank { generator.promptPreset },
                                         count = count,
                                     )
                                 val pages = materializeGeneratedQuestionsToPages(context, doc.id, generated)
