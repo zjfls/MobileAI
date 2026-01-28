@@ -62,6 +62,7 @@ fun EditorScreen(
     store: DocumentStore,
     docId: String,
     onBack: () -> Unit,
+    onOpenAiSettings: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -255,6 +256,13 @@ fun EditorScreen(
                                 overflowExpanded = false
                                 oppoStatusText = OppoPenKit.tryGetStatusText()
                                 oppoStatusOpen = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("AI 设置") },
+                            onClick = {
+                                overflowExpanded = false
+                                onOpenAiSettings()
                             },
                         )
                         DropdownMenuItem(

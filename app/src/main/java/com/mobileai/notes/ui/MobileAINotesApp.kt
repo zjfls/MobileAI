@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.mobileai.notes.data.DocumentStore
+import com.mobileai.notes.ui.screens.AiSettingsScreen
 import com.mobileai.notes.ui.screens.EditorScreen
 import com.mobileai.notes.ui.screens.HomeScreen
 
@@ -28,7 +29,11 @@ fun MobileAINotesApp() {
                 onOpenDocument = { docId ->
                     navController.navigate(Routes.editor(docId))
                 },
+                onOpenAiSettings = { navController.navigate(Routes.AiSettings) },
             )
+        }
+        composable(Routes.AiSettings) {
+            AiSettingsScreen(onBack = { navController.popBackStack() })
         }
         composable(
             Routes.Editor,
@@ -39,6 +44,7 @@ fun MobileAINotesApp() {
                 store = store,
                 docId = docId,
                 onBack = { navController.popBackStack() },
+                onOpenAiSettings = { navController.navigate(Routes.AiSettings) },
             )
         }
     }
@@ -47,6 +53,7 @@ fun MobileAINotesApp() {
 private object Routes {
     const val ArgDocId = "docId"
     const val Home = "home"
+    const val AiSettings = "ai_settings"
     const val Editor = "editor/{$ArgDocId}"
 
     fun editor(docId: String) = "editor/$docId"

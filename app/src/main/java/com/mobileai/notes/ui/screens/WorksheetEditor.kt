@@ -61,6 +61,8 @@ import com.mobileai.notes.data.ToolKind
 import com.mobileai.notes.data.WorksheetNote
 import com.mobileai.notes.data.WorksheetPage
 import com.mobileai.notes.export.ExportManager
+import com.mobileai.notes.ai.AiAgents
+import com.mobileai.notes.ai.GeneratedQuestion
 import com.mobileai.notes.host.HostClient
 import com.mobileai.notes.host.HostQuestion
 import com.mobileai.notes.ink.InkCanvas
@@ -93,6 +95,10 @@ fun WorksheetEditor(
     var hostBaseUrlDraft by remember(hostBaseUrl) { mutableStateOf(hostBaseUrl) }
     var editHostDialogOpen by remember { mutableStateOf(false) }
 
+    val aiSettingsState = settings.aiSettings.collectAsState(initial = com.mobileai.notes.settings.AiSettings())
+    val aiSettings = aiSettingsState.value
+    val aiAgents = remember { AiAgents() }
+
     val host = remember { HostClient() }
 
     val worksheet = doc.worksheet ?: WorksheetNote()
@@ -102,8 +108,9 @@ fun WorksheetEditor(
     var aiDialogOpen by remember { mutableStateOf(false) }
     var aiDialogText by remember { mutableStateOf("") }
     var aiGenerateOpen by remember { mutableStateOf(false) }
-    var aiPrompt by remember { mutableStateOf("生成一套数学/物理试卷，难度适中") }
-    var aiCount by remember { mutableStateOf("5") }
+    var aiPrompt by remember { mutableStateOf(aiSettings.paperGenerator.promptPreset) }
+    var aiCount by remember { mutableStateOf(aiSettings.paperGenerator.count.toString()) }
+    var aiExplainExtra by remember { mutableStateOf(aiSettings.explainerSettings.style) }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // Sidebar
@@ -353,15 +360,26 @@ fun WorksheetEditor(
                             FilledTonalButton(
                                 onClick = {
                                     scope.launch {
+                                        val provider =
+                                            aiSettings.providers.firstOrNull { it.id == aiSettings.defaultProviderId }
+                                                ?: aiSettings.providers.firstOrNull()
+                                        if (provider == null || provider.apiKey.isBlank()) {
+                                            snackbar.showSnackbar("请先在「AI 设置」里配置 API Key")
+                                            return@launch
+                                        }
                                         val idx = pageIndex
                                         val bytes =
                                             runCatching { ExportManager.renderWorksheetPagePngBytes(context, doc, idx) }.getOrNull()
-                                        if (bytes == null) {
-                                            snackbar.showSnackbar("当前页无法导出")
-                                            return@launch
-                                        }
                                         runCatching {
-                                            val answer = host.solvePage(hostBaseUrl, bytes)
+                                            val answer =
+                                                aiAgents.explainPage(
+                                                    providerBaseUrl = provider.baseUrl,
+                                                    providerApiKey = provider.apiKey,
+                                                    agent = aiSettings.explainer,
+                                                    questionText = currentPage?.questionText ?: currentPage?.title,
+                                                    pagePngBytes = bytes,
+                                                    extraInstruction = aiExplainExtra,
+                                                )
                                             aiDialogText = answer
                                             aiDialogOpen = true
                                         }.onFailure {
@@ -424,7 +442,7 @@ fun WorksheetEditor(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        "提示：该按钮会向 Host 发送请求，由 Host 调用 AI 出题并返回题目图片/链接。",
+                        "提示：该按钮会直接调用你配置的 LLM（不依赖 Host）。如果返回了题图链接/图片，将自动落盘并生成试卷页。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -437,8 +455,22 @@ fun WorksheetEditor(
                         val count = aiCount.toIntOrNull()?.coerceIn(1, 30) ?: 5
                         scope.launch {
                             runCatching {
-                                val questions = host.generatePaper(hostBaseUrl, aiPrompt, count)
-                                val pages = materializeQuestionsToPages(context, doc.id, questions)
+                                val provider =
+                                    aiSettings.providers.firstOrNull { it.id == aiSettings.defaultProviderId }
+                                        ?: aiSettings.providers.firstOrNull()
+                                if (provider == null || provider.apiKey.isBlank()) {
+                                    snackbar.showSnackbar("请先在「AI 设置」里配置 API Key")
+                                    return@launch
+                                }
+                                val generated =
+                                    aiAgents.generatePaper(
+                                        providerBaseUrl = provider.baseUrl,
+                                        providerApiKey = provider.apiKey,
+                                        agent = aiSettings.generator,
+                                        userPrompt = aiPrompt,
+                                        count = count,
+                                    )
+                                val pages = materializeGeneratedQuestionsToPages(context, doc.id, generated)
                                 val updated = doc.copy(worksheet = worksheet.copy(pages = pages))
                                 onDocChange(updated, true)
                                 pageIndex = 0
@@ -555,6 +587,38 @@ private fun WorksheetPageView(
                 PageTemplateBackground(template = template)
             }
 
+            val qt = page.questionText
+            if (!qt.isNullOrBlank()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    tonalElevation = 1.dp,
+                    shadowElevation = 8.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                        .align(Alignment.TopCenter),
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            page.title ?: "题目",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            qt,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "提示：在空白区域作答，右上角可 AI 讲解。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
             InkCanvas(
                 strokes = page.strokes,
                 modifier = Modifier.fillMaxSize(),
@@ -612,7 +676,49 @@ private suspend fun materializeQuestionsToPages(
             id = UUID.randomUUID().toString(),
             title = q.text?.takeIf { it.isNotBlank() } ?: "Question ${index + 1}",
             backgroundImageUri = imageUri,
+            questionText = q.text,
             strokes = emptyList(),
         )
     }.ifEmpty { listOf(WorksheetPage(id = UUID.randomUUID().toString())) }
 }
+
+private suspend fun materializeGeneratedQuestionsToPages(
+    context: android.content.Context,
+    docId: String,
+    questions: List<GeneratedQuestion>,
+): List<WorksheetPage> =
+    withContext(Dispatchers.IO) {
+        val outDir = File(context.filesDir, "worksheet-assets/$docId").apply { mkdirs() }
+        val client = okhttp3.OkHttpClient()
+
+        questions.mapIndexed { index, q ->
+            val imageUri =
+                when {
+                    !q.imageBase64.isNullOrBlank() -> {
+                        val bytes = android.util.Base64.decode(q.imageBase64, android.util.Base64.DEFAULT)
+                        val file = File(outDir, "ai_q_${index + 1}_${UUID.randomUUID()}.png")
+                        file.writeBytes(bytes)
+                        Uri.fromFile(file).toString()
+                    }
+                    !q.imageUrl.isNullOrBlank() -> {
+                        val req = okhttp3.Request.Builder().url(q.imageUrl).get().build()
+                        client.newCall(req).execute().use { resp ->
+                            if (!resp.isSuccessful) error("image HTTP ${resp.code}")
+                            val bytes = resp.body?.bytes() ?: ByteArray(0)
+                            val file = File(outDir, "ai_q_${index + 1}_${UUID.randomUUID()}.png")
+                            file.writeBytes(bytes)
+                            Uri.fromFile(file).toString()
+                        }
+                    }
+                    else -> null
+                }
+
+            WorksheetPage(
+                id = UUID.randomUUID().toString(),
+                title = q.title?.takeIf { it.isNotBlank() } ?: "Question ${index + 1}",
+                questionText = q.text,
+                backgroundImageUri = imageUri,
+                strokes = emptyList(),
+            )
+        }.ifEmpty { listOf(WorksheetPage(id = UUID.randomUUID().toString())) }
+    }

@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.TextButton
 
@@ -60,6 +61,7 @@ import androidx.compose.material3.TextButton
 fun HomeScreen(
     store: DocumentStore,
     onOpenDocument: (docId: String) -> Unit,
+    onOpenAiSettings: () -> Unit,
 ) {
     val context = LocalContext.current
     val documents by store.documents.collectAsState()
@@ -99,6 +101,11 @@ fun HomeScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenAiSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "AI 设置")
                     }
                 },
             )

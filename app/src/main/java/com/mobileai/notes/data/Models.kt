@@ -80,6 +80,7 @@ data class WorksheetPage(
     val id: String = "p1",
     val title: String? = null,
     val backgroundImageUri: String? = null,
+    val questionText: String? = null,
     val strokes: List<StrokeDto> = emptyList(),
     val canvasWidthPx: Int = 0,
     val canvasHeightPx: Int = 0,

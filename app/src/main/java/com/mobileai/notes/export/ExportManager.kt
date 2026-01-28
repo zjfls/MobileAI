@@ -7,6 +7,9 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import androidx.ink.rendering.android.canvas.CanvasStrokeRenderer
 import com.mobileai.notes.data.BlankNotebook
 import com.mobileai.notes.data.DocumentEntity
@@ -93,6 +96,7 @@ object ExportManager {
             drawTemplate(canvas, worksheet.template, scale)
         }
 
+        drawWorksheetHeader(canvas, page.title, page.questionText, scale)
         drawStrokes(canvas, page.strokes, scaleX = outW / baseW, scaleY = outH / baseH)
 
         return withContext(Dispatchers.IO) {
@@ -167,6 +171,7 @@ object ExportManager {
                     drawTemplate(canvas, worksheet.template, scale)
                 }
 
+                drawWorksheetHeader(canvas, page.title, page.questionText, scale)
                 drawStrokes(canvas, page.strokes, scaleX = outW / baseW, scaleY = outH / baseH)
                 pdfDocument.finishPage(pdfPage)
             }
@@ -323,5 +328,64 @@ object ExportManager {
                 android.graphics.BitmapFactory.decodeStream(input)
             }
         }.getOrNull()
+    }
+
+    private fun drawWorksheetHeader(
+        canvas: Canvas,
+        title: String?,
+        questionText: String?,
+        scale: Float,
+    ) {
+        val text = questionText?.trim().orEmpty()
+        if (text.isBlank()) return
+
+        val padding = (20f * scale).roundToInt()
+        val corner = 18f * scale
+        val headerMaxW = canvas.width - padding * 2
+        if (headerMaxW <= 0) return
+
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xF2FFFFFF.toInt()
+        }
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 1.2f * scale
+            color = 0x1A000000
+        }
+
+        val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF4F46E5.toInt()
+            textSize = 14f * scale
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+        }
+        val bodyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF0F172A.toInt()
+            textSize = 13.5f * scale
+        }
+
+        val layout = StaticLayout.Builder.obtain(text, 0, text.length, bodyPaint, headerMaxW)
+            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            .setIncludePad(false)
+            .build()
+
+        val titleLine = (title?.trim().takeIf { !it.isNullOrBlank() } ?: "题目")
+        val titleH = (titlePaint.fontMetrics.bottom - titlePaint.fontMetrics.top).toInt()
+        val contentH = titleH + (10f * scale).roundToInt() + layout.height
+        val boxH = contentH + padding
+
+        val left = padding.toFloat()
+        val top = padding.toFloat()
+        val right = (padding + headerMaxW).toFloat()
+        val bottom = (padding + boxH).toFloat().coerceAtMost(canvas.height.toFloat())
+        val rect = android.graphics.RectF(left, top, right, bottom)
+        canvas.drawRoundRect(rect, corner, corner, bgPaint)
+        canvas.drawRoundRect(rect, corner, corner, strokePaint)
+
+        canvas.save()
+        canvas.translate(left + padding / 2f, top + padding / 2f)
+        canvas.drawText(titleLine, 0f, titleH.toFloat(), titlePaint)
+        canvas.translate(0f, titleH + (10f * scale))
+        layout.draw(canvas)
+        canvas.restore()
     }
 }
