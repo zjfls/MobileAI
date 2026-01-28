@@ -17,6 +17,18 @@
 1. 用 Android Studio 打开本仓库
 2. 选择 `app` 运行
 
+## 命令行构建（推荐）
+
+本仓库提供构建脚本，默认规则是：
+
+- **优先使用 Android Studio 自带的 JBR/JDK**（如果系统安装了 Android Studio）
+- 如果没有 Android Studio，再使用系统配置的 `JAVA_HOME` / `java`
+
+常用命令：
+
+- Debug APK：`scripts/build-debug`
+- 任意 Gradle 任务：`scripts/gradle <tasks...>`
+
 ## OPPO Pencil（可选增强）
 
 本项目默认 **不强依赖** OPPO 的 `ipe_sdk`（避免没有授权码/依赖时无法编译或运行）。如果你要在 OPPO Pad 上启用专属能力：
@@ -30,4 +42,3 @@
    - 功能震动/书写反馈震动（设备支持时）
 
 > 注意：授权码/签名与包名强绑定，请按你的应用包名与签名申请。
-

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prefer Android Studio's bundled JBR (JDK) on macOS when available.
+# Fallback to system JAVA_HOME / java on PATH.
+#
+# Usage:
+#   scripts/gradle :app:assembleDebug
+#
+# Optional:
+#   FORCE_SYSTEM_JAVA=1 scripts/gradle ...
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+# Prefer project-local Gradle home to reduce global pollution and allow prewarming.
+if [[ -z "${GRADLE_USER_HOME:-}" ]]; then
+  export GRADLE_USER_HOME="$ROOT/.gradle-home"
+fi
+
+# Gradle Wrapper downloads can be slow on some networks; increase wrapper timeout.
+export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.wrapper.networkTimeout=600000"
+
+if [[ "${FORCE_SYSTEM_JAVA:-}" != "1" ]]; then
+  candidates=(
+    "/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+    "/Applications/Android Studio Preview.app/Contents/jbr/Contents/Home"
+  )
+
+  for jbr in "${candidates[@]}"; do
+    if [[ -x "$jbr/bin/java" ]]; then
+      export JAVA_HOME="$jbr"
+      break
+    fi
+  done
+fi
+
+# Best-effort local.properties bootstrap (never committed; in .gitignore).
+if [[ ! -f "local.properties" ]]; then
+  for sdk in \
+    "${ANDROID_SDK_ROOT:-}" \
+    "${ANDROID_HOME:-}" \
+    "$HOME/Library/Android/sdk" \
+    ; do
+    if [[ -n "$sdk" && -d "$sdk" ]]; then
+      printf "sdk.dir=%s\n" "$sdk" > local.properties
+      break
+    fi
+  done
+fi
+
+exec ./gradlew "$@"
