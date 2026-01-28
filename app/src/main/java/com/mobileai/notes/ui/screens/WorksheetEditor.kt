@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.NavigateBefore
 import androidx.compose.material.icons.filled.NavigateNext
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -31,6 +32,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
@@ -52,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import com.mobileai.notes.data.DocumentEntity
 import com.mobileai.notes.data.PageTemplate
 import com.mobileai.notes.data.ToolKind
@@ -88,6 +91,7 @@ fun WorksheetEditor(
     val hostSettingsState = settings.hostSettings.collectAsState(initial = com.mobileai.notes.settings.HostSettings.Default)
     val hostBaseUrl = hostSettingsState.value.baseUrl
     var hostBaseUrlDraft by remember(hostBaseUrl) { mutableStateOf(hostBaseUrl) }
+    var editHostDialogOpen by remember { mutableStateOf(false) }
 
     val host = remember { HostClient() }
 
@@ -200,28 +204,33 @@ fun WorksheetEditor(
                     shape = MaterialTheme.shapes.extraLarge,
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            "ENDPOINT",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        OutlinedTextField(
-                            value = hostBaseUrlDraft,
-                            onValueChange = { hostBaseUrlDraft = it },
-                            singleLine = true,
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("https://api.example.com") },
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "ENDPOINT",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    hostBaseUrl,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            IconButton(onClick = {
+                                hostBaseUrlDraft = hostBaseUrl
+                                editHostDialogOpen = true
+                            }) {
+                                Icon(Icons.Filled.Edit, contentDescription = "编辑 Host")
+                            }
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                            FilledTonalButton(
-                                onClick = {
-                                    scope.launch {
-                                        settings.setHostBaseUrl(hostBaseUrlDraft)
-                                        snackbar.showSnackbar("Host 已保存")
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                            ) { Text("保存") }
                             Button(
                                 onClick = {
                                     val updated = doc.copy(worksheet = worksheet.copy(pages = listOf(WorksheetPage(id = UUID.randomUUID().toString()))))
@@ -442,6 +451,44 @@ fun WorksheetEditor(
             },
             dismissButton = {
                 TextButton(onClick = { aiGenerateOpen = false }) { Text("取消") }
+            },
+        )
+    }
+
+    if (editHostDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { editHostDialogOpen = false },
+            title = { Text("设置 Host Endpoint") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = hostBaseUrlDraft,
+                        onValueChange = { hostBaseUrlDraft = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("https://api.example.com") },
+                        label = { Text("Base URL") },
+                    )
+                    Text(
+                        "例如：`https://api.mock-edu.com` 或 `http://192.168.1.10:8080`",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        editHostDialogOpen = false
+                        scope.launch {
+                            settings.setHostBaseUrl(hostBaseUrlDraft)
+                            snackbar.showSnackbar("Host 已保存")
+                        }
+                    },
+                ) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editHostDialogOpen = false }) { Text("取消") }
             },
         )
     }
