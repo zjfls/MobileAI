@@ -38,6 +38,8 @@ data class AiProvider(
 @Serializable
 enum class AiProviderType {
     OPENAI_COMPATIBLE,
+    ANTHROPIC,
+    GOOGLE,
 }
 
 @Serializable

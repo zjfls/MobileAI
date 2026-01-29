@@ -59,6 +59,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mobileai.notes.ai.AnthropicClient
+import com.mobileai.notes.ai.GoogleGeminiClient
 import com.mobileai.notes.ai.OpenAiCompatClient
 import com.mobileai.notes.settings.AiAgentConfig
 import com.mobileai.notes.settings.AiAgentPreset
@@ -212,12 +214,18 @@ private fun ProviderEditor(
     var name by remember(provider.id) { mutableStateOf(provider.name) }
     var baseUrl by remember(provider.id) { mutableStateOf(provider.baseUrl) }
     var apiKey by remember(provider.id) { mutableStateOf(provider.apiKey) }
+    var type by remember(provider.id) { mutableStateOf(provider.type) }
     var enabled by remember(provider.id) { mutableStateOf(provider.enabled) }
     var showKey by remember(provider.id) { mutableStateOf(false) }
 
+    var typeMenuOpen by remember(provider.id) { mutableStateOf(false) }
     var modelsDialogOpen by remember(provider.id) { mutableStateOf(false) }
     var models by remember(provider.id) { mutableStateOf<List<String>>(emptyList()) }
     var modelFetchError by remember(provider.id) { mutableStateOf<String?>(null) }
+
+    val openaiClient = remember { OpenAiCompatClient() }
+    val anthropicClient = remember { AnthropicClient() }
+    val googleClient = remember { GoogleGeminiClient() }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -236,6 +244,43 @@ private fun ProviderEditor(
                     Checkbox(checked = enabled, onCheckedChange = { enabled = it })
                     Text(if (enabled) "ON" else "OFF")
                     IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "删除") }
+                }
+            }
+
+            Text("类型", style = MaterialTheme.typography.labelLarge)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value =
+                        when (type) {
+                            AiProviderType.OPENAI_COMPATIBLE -> "OpenAI Compatible"
+                            AiProviderType.ANTHROPIC -> "Anthropic"
+                            AiProviderType.GOOGLE -> "Google (Gemini)"
+                        },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Provider 类型") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                Box {
+                    TextButton(onClick = { typeMenuOpen = true }) { Text("选择") }
+                    DropdownMenu(expanded = typeMenuOpen, onDismissRequest = { typeMenuOpen = false }) {
+                        fun pick(t: AiProviderType) {
+                            type = t
+                            // Best-effort baseUrl suggestion.
+                            val suggested =
+                                when (t) {
+                                    AiProviderType.OPENAI_COMPATIBLE -> "https://api.openai.com/v1"
+                                    AiProviderType.ANTHROPIC -> "https://api.anthropic.com"
+                                    AiProviderType.GOOGLE -> "https://generativelanguage.googleapis.com"
+                                }
+                            if (baseUrl.isBlank() || baseUrl == provider.baseUrl) baseUrl = suggested
+                            typeMenuOpen = false
+                        }
+                        DropdownMenuItem(text = { Text("OpenAI Compatible") }, onClick = { pick(AiProviderType.OPENAI_COMPATIBLE) })
+                        DropdownMenuItem(text = { Text("Anthropic") }, onClick = { pick(AiProviderType.ANTHROPIC) })
+                        DropdownMenuItem(text = { Text("Google (Gemini)") }, onClick = { pick(AiProviderType.GOOGLE) })
+                    }
                 }
             }
 
@@ -270,7 +315,7 @@ private fun ProviderEditor(
                                 baseUrl = baseUrl.trim(),
                                 apiKey = apiKey.trim(),
                                 enabled = enabled,
-                                type = AiProviderType.OPENAI_COMPATIBLE,
+                                type = type,
                             ),
                         )
                         scope.launch { snackbar.showSnackbar("已保存") }
@@ -281,7 +326,12 @@ private fun ProviderEditor(
                     onClick = {
                         scope.launch {
                             runCatching {
-                                val list = OpenAiCompatClient().listModels(baseUrl.trim(), apiKey.trim())
+                                val list =
+                                    when (type) {
+                                        AiProviderType.OPENAI_COMPATIBLE -> openaiClient.listModels(baseUrl.trim(), apiKey.trim())
+                                        AiProviderType.ANTHROPIC -> anthropicClient.listModels(baseUrl.trim(), apiKey.trim())
+                                        AiProviderType.GOOGLE -> googleClient.listModels(baseUrl.trim(), apiKey.trim())
+                                    }
                                 models = list
                                 modelFetchError = null
                                 modelsDialogOpen = true
@@ -299,7 +349,7 @@ private fun ProviderEditor(
             }
 
             Text(
-                "说明：这里只做 OpenAI-Compatible（Base URL + Key）。Key 将保存在本机 DataStore（未加密）。",
+                "说明：支持 OpenAI-Compatible / Anthropic / Google Gemini。Key 将保存在本机 DataStore（未加密）。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -918,4 +968,3 @@ private fun EmptyRightPanel(text: String) {
         }
     }
 }
-

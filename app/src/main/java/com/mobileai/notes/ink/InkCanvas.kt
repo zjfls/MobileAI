@@ -68,11 +68,12 @@ fun InkCanvas(
             val toolType = runCatching { event.getToolType(0) }.getOrNull() ?: MotionEvent.TOOL_TYPE_UNKNOWN
             val isStylus = toolType == MotionEvent.TOOL_TYPE_STYLUS
             val isStylusEraser = toolType == MotionEvent.TOOL_TYPE_ERASER
-            val allowNonStylusInk = latestSimulatePressure && !latestIsEraser
-            if (allowNonStylusInk && !isStylus && !isStylusEraser && event.pointerCount > 1) {
+            val isMouse = toolType == MotionEvent.TOOL_TYPE_MOUSE || toolType == MotionEvent.TOOL_TYPE_UNKNOWN
+            val allowMouseInput = latestSimulatePressure && isMouse
+            if (allowMouseInput && !isStylus && !isStylusEraser && event.pointerCount > 1) {
                 return@pointerInteropFilter false
             }
-            if (!isStylus && !isStylusEraser && !allowNonStylusInk) {
+            if (!isStylus && !isStylusEraser && !allowMouseInput) {
                 hoverPosition = null
                 eraserPosition = null
                 // Palm rejection: when stylus is down, swallow touch.
@@ -130,7 +131,7 @@ fun InkCanvas(
 
             val pointerId = event.getPointerId(event.actionIndex.coerceAtLeast(0))
             val syntheticPressure =
-                if (allowNonStylusInk && !isStylus) pressureFromSizeSlider(latestSize) else null
+                if (allowMouseInput && !isStylus) pressureFromSizeSlider(latestSize) else null
             val brushForThisEvent = if (syntheticPressure != null) latestSimulatedBrush else latestStylusBrush
 
             fun eventForInk(original: MotionEvent): MotionEvent {

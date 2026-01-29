@@ -397,8 +397,7 @@ fun WorksheetEditor(
                                             val style = (aiExplainExtra.takeIf { it.isNotBlank() } ?: explainer.style).trim()
                                             val answer =
                                                 aiAgents.explainPage(
-                                                    providerBaseUrl = provider.baseUrl,
-                                                    providerApiKey = provider.apiKey,
+                                                    provider = provider,
                                                     agent = agent.config,
                                                     questionText = currentPage?.questionText ?: currentPage?.title,
                                                     pagePngBytes = bytes,
@@ -502,8 +501,7 @@ fun WorksheetEditor(
                                 }
                                 val generated =
                                     aiAgents.generatePaper(
-                                        providerBaseUrl = provider.baseUrl,
-                                        providerApiKey = provider.apiKey,
+                                        provider = provider,
                                         agent = agent.config,
                                         userPrompt = aiPrompt.ifBlank { generator.promptPreset },
                                         count = count,

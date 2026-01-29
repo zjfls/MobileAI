@@ -1,5 +1,7 @@
 package com.mobileai.notes.ai
 
+import com.mobileai.notes.settings.AiProvider
+import com.mobileai.notes.settings.AiProviderType
 import com.mobileai.notes.settings.AiAgentConfig
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.SerialName
@@ -8,11 +10,12 @@ import kotlinx.serialization.json.Json
 
 class AiAgents(
     private val client: OpenAiCompatClient = OpenAiCompatClient(),
+    private val anthropic: AnthropicClient = AnthropicClient(),
+    private val google: GoogleGeminiClient = GoogleGeminiClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
     suspend fun generatePaper(
-        providerBaseUrl: String,
-        providerApiKey: String,
+        provider: AiProvider,
         agent: AiAgentConfig,
         userPrompt: String,
         count: Int,
@@ -26,21 +29,17 @@ class AiAgents(
             }
 
         val raw =
-            client.chat(
-                baseUrl = providerBaseUrl,
-                apiKey = providerApiKey,
-                model = agent.model,
-                systemPrompt = agent.systemPrompt,
+            chat(
+                provider = provider,
+                agent = agent,
                 userText = prompt,
-                temperature = agent.temperature,
-                maxTokens = agent.maxTokens,
+                userImagePngBytes = null,
             )
         return parseQuestions(raw)
     }
 
     suspend fun explainPage(
-        providerBaseUrl: String,
-        providerApiKey: String,
+        provider: AiProvider,
         agent: AiAgentConfig,
         questionText: String?,
         pagePngBytes: ByteArray?,
@@ -61,16 +60,57 @@ class AiAgents(
                 appendLine("请结合图片中的学生作答进行讲解与纠错。")
             }
 
-        return client.chat(
-            baseUrl = providerBaseUrl,
-            apiKey = providerApiKey,
-            model = agent.model,
-            systemPrompt = agent.systemPrompt,
+        return chat(
+            provider = provider,
+            agent = agent,
             userText = userText,
             userImagePngBytes = pagePngBytes,
-            temperature = agent.temperature,
-            maxTokens = agent.maxTokens,
         )
+    }
+
+    private suspend fun chat(
+        provider: AiProvider,
+        agent: AiAgentConfig,
+        userText: String,
+        userImagePngBytes: ByteArray?,
+    ): String {
+        val baseUrl = provider.baseUrl
+        val apiKey = provider.apiKey
+        return when (provider.type) {
+            AiProviderType.OPENAI_COMPATIBLE ->
+                client.chat(
+                    baseUrl = baseUrl,
+                    apiKey = apiKey,
+                    model = agent.model,
+                    systemPrompt = agent.systemPrompt,
+                    userText = userText,
+                    userImagePngBytes = userImagePngBytes,
+                    temperature = agent.temperature,
+                    maxTokens = agent.maxTokens,
+                )
+            AiProviderType.ANTHROPIC ->
+                anthropic.messages(
+                    baseUrl = baseUrl,
+                    apiKey = apiKey,
+                    model = agent.model,
+                    systemPrompt = agent.systemPrompt,
+                    userText = userText,
+                    userImagePngBytes = userImagePngBytes,
+                    temperature = agent.temperature,
+                    maxTokens = agent.maxTokens,
+                )
+            AiProviderType.GOOGLE ->
+                google.generateContent(
+                    baseUrl = baseUrl,
+                    apiKey = apiKey,
+                    model = agent.model,
+                    systemPrompt = agent.systemPrompt,
+                    userText = userText,
+                    userImagePngBytes = userImagePngBytes,
+                    temperature = agent.temperature,
+                    maxTokens = agent.maxTokens,
+                )
+        }
     }
 
     private fun parseQuestions(raw: String): List<GeneratedQuestion> {
