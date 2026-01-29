@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
@@ -214,7 +215,6 @@ private fun ProviderEditor(
     snackbar: SnackbarHostState,
 ) {
     val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
     var name by remember(provider.id) { mutableStateOf(provider.name) }
     var baseUrl by remember(provider.id) { mutableStateOf(provider.baseUrl) }
     var apiKey by remember(provider.id) { mutableStateOf(provider.apiKey) }
@@ -223,15 +223,20 @@ private fun ProviderEditor(
     var showKey by remember(provider.id) { mutableStateOf(false) }
 
     var typeMenuOpen by remember(provider.id) { mutableStateOf(false) }
-    var modelsDialogOpen by remember(provider.id) { mutableStateOf(false) }
     var models by remember(provider.id) { mutableStateOf(provider.models) }
+    var modelPickerOpen by remember(provider.id) { mutableStateOf(false) }
+    var modelManualAddOpen by remember(provider.id) { mutableStateOf(false) }
     var modelFetchError by remember(provider.id) { mutableStateOf<String?>(null) }
+    var fetchedModels by remember(provider.id) { mutableStateOf<List<String>>(emptyList()) }
+    var modelQuery by remember(provider.id) { mutableStateOf("") }
+    var modelSelected by remember(provider.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var manualModelInput by remember(provider.id) { mutableStateOf("") }
 
     val openaiClient = remember { OpenAiCompatClient() }
     val anthropicClient = remember { AnthropicClient() }
     val googleClient = remember { GoogleGeminiClient() }
 
-    fun buildProvider(modelsOverride: List<String> = provider.models): AiProvider {
+    fun buildProvider(modelsOverride: List<String> = models): AiProvider {
         return provider.copy(
             name = name.trim().ifEmpty { provider.name },
             baseUrl = baseUrl.trim(),
@@ -321,13 +326,55 @@ private fun ProviderEditor(
                 },
             )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("模型列表（已添加）", style = MaterialTheme.typography.labelLarge)
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+            ) {
+                if (models.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text("暂无模型，请先「获取模型」或「手动添加」。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                        items(models, key = { it }) { m ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(m, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                IconButton(
+                                    onClick = {
+                                        val updated = models.filterNot { it == m }
+                                        models = updated
+                                        onUpdate(buildProvider(modelsOverride = updated))
+                                    },
+                                ) {
+                                    Icon(Icons.Filled.Delete, contentDescription = "移除模型")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
-                        onUpdate(buildProvider(modelsOverride = provider.models))
+                        onUpdate(buildProvider(modelsOverride = models))
                         scope.launch { snackbar.showSnackbar("已保存") }
                     },
                 ) { Text("保存") }
+
+                Button(
+                    onClick = { modelManualAddOpen = true },
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("手动添加")
+                }
 
                 Button(
                     onClick = {
@@ -339,13 +386,14 @@ private fun ProviderEditor(
                                         AiProviderType.ANTHROPIC -> anthropicClient.listModels(baseUrl.trim(), apiKey.trim())
                                         AiProviderType.GOOGLE -> googleClient.listModels(baseUrl.trim(), apiKey.trim())
                                     }
-                                models = list
-                                onUpdate(buildProvider(modelsOverride = list))
+                                fetchedModels = list
+                                modelQuery = ""
+                                modelSelected = emptySet()
                                 modelFetchError = null
-                                modelsDialogOpen = true
+                                modelPickerOpen = true
                             }.onFailure {
                                 modelFetchError = it.message
-                                modelsDialogOpen = true
+                                modelPickerOpen = true
                             }
                         }
                     },
@@ -357,47 +405,88 @@ private fun ProviderEditor(
             }
 
             Text(
-                "已缓存模型：${provider.models.size}；支持 OpenAI-Compatible / Anthropic / Google Gemini。Key 将保存在本机 DataStore（未加密）。",
+                "已添加模型：${models.size}；支持 OpenAI-Compatible / Anthropic / Google Gemini。Key 将保存在本机 DataStore（未加密）。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 
-    if (modelsDialogOpen) {
+    if (modelPickerOpen) {
         AlertDialog(
-            onDismissRequest = { modelsDialogOpen = false },
-            title = { Text("可用模型") },
+            onDismissRequest = { modelPickerOpen = false },
+            title = { Text("获取到的模型") },
             text = {
                 if (modelFetchError != null) {
                     Text("获取失败：$modelFetchError")
                 } else {
+                    val filtered =
+                        if (modelQuery.isBlank()) {
+                            fetchedModels
+                        } else {
+                            val q = modelQuery.trim()
+                            fetchedModels.filter { it.contains(q, ignoreCase = true) }
+                        }
+
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            "点击模型可复制到剪贴板",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        OutlinedTextField(
+                            value = modelQuery,
+                            onValueChange = { modelQuery = it },
+                            label = { Text("搜索模型") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            trailingIcon = {
+                                if (modelQuery.isNotBlank()) {
+                                    IconButton(onClick = { modelQuery = "" }) {
+                                        Icon(Icons.Filled.Close, contentDescription = "清空")
+                                    }
+                                }
+                            },
                         )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                "已选 ${modelSelected.size} / ${filtered.size}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                TextButton(
+                                    enabled = filtered.isNotEmpty(),
+                                    onClick = { modelSelected = filtered.toSet() },
+                                ) { Text("全选") }
+                                TextButton(
+                                    enabled = modelSelected.isNotEmpty(),
+                                    onClick = { modelSelected = emptySet() },
+                                ) { Text("清空") }
+                            }
+                        }
+
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = MaterialTheme.shapes.large,
                             modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
                         ) {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                            ) {
-                                items(models, key = { it }) { m ->
+                            LazyColumn(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                                items(filtered, key = { it }) { m ->
+                                    val checked = modelSelected.contains(m)
                                     Row(
                                         modifier =
                                             Modifier
                                                 .fillMaxWidth()
                                                 .clickable {
-                                                    clipboard.setText(AnnotatedString(m))
-                                                    scope.launch { snackbar.showSnackbar("已复制：$m") }
+                                                    modelSelected =
+                                                        if (checked) modelSelected - m else modelSelected + m
                                                 }
                                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     ) {
+                                        Checkbox(checked = checked, onCheckedChange = null)
                                         Text(m, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
@@ -406,7 +495,58 @@ private fun ProviderEditor(
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { modelsDialogOpen = false }) { Text("关闭") } },
+            confirmButton = {
+                TextButton(
+                    enabled = modelFetchError == null && modelSelected.isNotEmpty(),
+                    onClick = {
+                        val merged = (models + modelSelected).distinct()
+                        models = merged
+                        onUpdate(buildProvider(modelsOverride = merged))
+                        modelPickerOpen = false
+                        scope.launch { snackbar.showSnackbar("已添加 ${modelSelected.size} 个模型") }
+                    },
+                ) { Text("添加选中(${modelSelected.size})") }
+            },
+            dismissButton = { TextButton(onClick = { modelPickerOpen = false }) { Text("取消") } },
+        )
+    }
+
+    if (modelManualAddOpen) {
+        AlertDialog(
+            onDismissRequest = { modelManualAddOpen = false },
+            title = { Text("手动添加模型") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = manualModelInput,
+                        onValueChange = { manualModelInput = it },
+                        label = { Text("模型名 / ID") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("例如：gpt-4o-mini / claude-3-5-sonnet / gemini-1.5-pro") },
+                    )
+                    Text(
+                        "保存到该 Provider 的模型库，Agent 里可直接选择。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val m = manualModelInput.trim()
+                        if (m.isBlank()) return@TextButton
+                        val merged = (models + m).distinct()
+                        models = merged
+                        onUpdate(buildProvider(modelsOverride = merged))
+                        manualModelInput = ""
+                        modelManualAddOpen = false
+                        scope.launch { snackbar.showSnackbar("已添加：$m") }
+                    },
+                ) { Text("添加") }
+            },
+            dismissButton = { TextButton(onClick = { modelManualAddOpen = false }) { Text("取消") } },
         )
     }
 }
