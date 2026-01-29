@@ -51,17 +51,14 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mobileai.notes.ai.AnthropicClient
@@ -75,7 +72,6 @@ import com.mobileai.notes.settings.AiSettings
 import com.mobileai.notes.settings.AppSettings
 import com.mobileai.notes.settings.ExplainerConfig
 import com.mobileai.notes.settings.PaperGeneratorConfig
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -249,17 +245,8 @@ private fun ProviderEditor(
         )
     }
 
-    // Auto-save (debounced) for text inputs and toggles.
-    var lastSaved by remember(provider.id) { mutableStateOf(provider) }
-    val draftForAutoSave = buildProvider(modelsOverride = models)
-    LaunchedEffect(draftForAutoSave) {
-        if (draftForAutoSave == lastSaved) return@LaunchedEffect
-        delay(450)
-        // Re-check after debounce; the effect will be cancelled on new input.
-        if (draftForAutoSave != lastSaved) {
-            onUpdate(draftForAutoSave)
-            lastSaved = draftForAutoSave
-        }
+    fun persist(modelsOverride: List<String> = models) {
+        onUpdate(buildProvider(modelsOverride = modelsOverride))
     }
 
     Surface(
@@ -276,7 +263,13 @@ private fun ProviderEditor(
             ) {
                 Text("Provider 配置", style = MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = enabled, onCheckedChange = { enabled = it })
+                    Checkbox(
+                        checked = enabled,
+                        onCheckedChange = {
+                            enabled = it
+                            persist()
+                        },
+                    )
                     Text(if (enabled) "ON" else "OFF")
                     IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "删除") }
                 }
@@ -311,6 +304,7 @@ private fun ProviderEditor(
                                 }
                             if (baseUrl.isBlank() || baseUrl == provider.baseUrl) baseUrl = suggested
                             typeMenuOpen = false
+                            persist()
                         }
                         DropdownMenuItem(text = { Text("OpenAI Compatible") }, onClick = { pick(AiProviderType.OPENAI_COMPATIBLE) })
                         DropdownMenuItem(text = { Text("Anthropic") }, onClick = { pick(AiProviderType.ANTHROPIC) })
@@ -319,17 +313,31 @@ private fun ProviderEditor(
                 }
             }
 
-            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("显示名称") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = name,
+                onValueChange = {
+                    name = it
+                    persist()
+                },
+                label = { Text("显示名称") },
+                modifier = Modifier.fillMaxWidth(),
+            )
             OutlinedTextField(
                 value = baseUrl,
-                onValueChange = { baseUrl = it },
+                onValueChange = {
+                    baseUrl = it
+                    persist()
+                },
                 label = { Text("API 地址（Base URL）") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
             OutlinedTextField(
                 value = apiKey,
-                onValueChange = { apiKey = it },
+                onValueChange = {
+                    apiKey = it
+                    persist()
+                },
                 label = { Text("API Key") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -364,8 +372,7 @@ private fun ProviderEditor(
                                     onClick = {
                                         val updated = models.filterNot { it == m }
                                         models = updated
-                                        onUpdate(buildProvider(modelsOverride = updated))
-                                        lastSaved = buildProvider(modelsOverride = updated)
+                                        persist(modelsOverride = updated)
                                     },
                                 ) {
                                     Icon(Icons.Filled.Delete, contentDescription = "移除模型")
@@ -510,8 +517,7 @@ private fun ProviderEditor(
                     onClick = {
                         val merged = (models + modelSelected).distinct()
                         models = merged
-                        onUpdate(buildProvider(modelsOverride = merged))
-                        lastSaved = buildProvider(modelsOverride = merged)
+                        persist(modelsOverride = merged)
                         modelPickerOpen = false
                         scope.launch { snackbar.showSnackbar("已添加 ${modelSelected.size} 个模型") }
                     },
@@ -549,8 +555,7 @@ private fun ProviderEditor(
                         if (m.isBlank()) return@TextButton
                         val merged = (models + m).distinct()
                         models = merged
-                        onUpdate(buildProvider(modelsOverride = merged))
-                        lastSaved = buildProvider(modelsOverride = merged)
+                        persist(modelsOverride = merged)
                         manualModelInput = ""
                         modelManualAddOpen = false
                         scope.launch { snackbar.showSnackbar("已添加：$m") }
@@ -606,7 +611,6 @@ private fun AgentPanel(
             providers = settings.providers,
             onSave = { updated ->
                 onSave(settings.copy(agents = settings.agents.map { if (it.id == updated.id) updated else it }))
-                scope.launch { snackbar.showSnackbar("已保存") }
             },
             onDelete = {
                 scope.launch {
@@ -650,9 +654,10 @@ private fun AgentPresetEditor(
     val currentProvider = providerOptions.firstOrNull { it.id == providerId }
     var modelMenuOpen by remember(preset.id) { mutableStateOf(false) }
 
-    var lastSaved by remember(preset.id) { mutableStateOf(preset) }
-    val draftForAutoSave =
-        preset.copy(
+    fun buildPreset(): AiAgentPreset {
+        val t = temperature.toFloatOrNull()?.coerceIn(0f, 2f) ?: preset.config.temperature
+        val mt = maxTokens.toIntOrNull()?.coerceIn(128, 8192) ?: preset.config.maxTokens
+        return preset.copy(
             name = displayName.trim().ifBlank { preset.name },
             enabled = enabled,
             config =
@@ -660,17 +665,14 @@ private fun AgentPresetEditor(
                     providerId = providerId,
                     model = model.trim(),
                     systemPrompt = systemPrompt.trim(),
-                    temperature = temperature.toFloatOrNull()?.coerceIn(0f, 2f) ?: preset.config.temperature,
-                    maxTokens = maxTokens.toIntOrNull()?.coerceIn(128, 8192) ?: preset.config.maxTokens,
+                    temperature = t,
+                    maxTokens = mt,
                 ),
         )
-    LaunchedEffect(draftForAutoSave) {
-        if (draftForAutoSave == lastSaved) return@LaunchedEffect
-        delay(450)
-        if (draftForAutoSave != lastSaved) {
-            onSave(draftForAutoSave)
-            lastSaved = draftForAutoSave
-        }
+    }
+
+    fun persist() {
+        onSave(buildPreset())
     }
 
     Surface(
@@ -686,13 +688,22 @@ private fun AgentPresetEditor(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Checkbox(checked = enabled, onCheckedChange = { enabled = it })
+                Checkbox(
+                    checked = enabled,
+                    onCheckedChange = {
+                        enabled = it
+                        persist()
+                    },
+                )
                 Text(if (enabled) "ON" else "OFF")
             }
 
             OutlinedTextField(
                 value = displayName,
-                onValueChange = { displayName = it },
+                onValueChange = {
+                    displayName = it
+                    persist()
+                },
                 label = { Text("显示名称") },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -714,7 +725,7 @@ private fun AgentPresetEditor(
                             providerOptions.forEach { p ->
                                 DropdownMenuItem(
                                     text = { Text(if (p.enabled) p.name else "${p.name}（OFF）") },
-                                    onClick = { providerId = p.id; providerMenuOpen = false },
+                                    onClick = { providerId = p.id; providerMenuOpen = false; persist() },
                                 )
                             }
                         }
@@ -723,7 +734,10 @@ private fun AgentPresetEditor(
 
                 OutlinedTextField(
                     value = model,
-                    onValueChange = { model = it },
+                    onValueChange = {
+                        model = it
+                        persist()
+                    },
                     label = { Text("模型") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
@@ -742,7 +756,7 @@ private fun AgentPresetEditor(
                                 (currentProvider?.models ?: emptyList()).take(200).forEach { m ->
                                     DropdownMenuItem(
                                         text = { Text(m, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                        onClick = { model = m; modelMenuOpen = false },
+                                        onClick = { model = m; modelMenuOpen = false; persist() },
                                     )
                                 }
                             }
@@ -750,7 +764,7 @@ private fun AgentPresetEditor(
                     }
                 } else {
                     Text(
-                        "提示：先在 Provider 里「获取模型」并保存，Agent 才能下拉选择。",
+                        "提示：先在 Provider 里「获取模型」并添加，Agent 才能下拉选择。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -758,14 +772,20 @@ private fun AgentPresetEditor(
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = temperature,
-                        onValueChange = { temperature = it.filter { ch -> ch.isDigit() || ch == '.' }.take(4) },
+                        onValueChange = {
+                            temperature = it.filter { ch -> ch.isDigit() || ch == '.' }.take(4)
+                            persist()
+                        },
                         label = { Text("temperature") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                     )
                     OutlinedTextField(
                         value = maxTokens,
-                        onValueChange = { maxTokens = it.filter { ch -> ch.isDigit() }.take(5) },
+                        onValueChange = {
+                            maxTokens = it.filter { ch -> ch.isDigit() }.take(5)
+                            persist()
+                        },
                         label = { Text("max_tokens") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
@@ -773,18 +793,17 @@ private fun AgentPresetEditor(
                 }
                 OutlinedTextField(
                     value = systemPrompt,
-                    onValueChange = { systemPrompt = it },
+                    onValueChange = {
+                        systemPrompt = it
+                        persist()
+                    },
                     label = { Text("系统提示词（System Prompt）") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 6,
                 )
             }
 
-            Text(
-                "自动保存：输入停止约 0.5 秒后生效。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text("已自动保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -852,7 +871,6 @@ private fun PaperGeneratorPanel(
             },
             onSave = { updated ->
                 onSave(settings.copy(paperGenerators = settings.paperGenerators.map { if (it.id == updated.id) updated else it }))
-                scope.launch { snackbar.showSnackbar("已保存") }
             },
             onDelete = {
                 val remain = settings.paperGenerators.filterNot { it.id == selected.id }
@@ -884,22 +902,19 @@ private fun PaperGeneratorEditor(
     var agentMenuOpen by remember(generator.id) { mutableStateOf(false) }
     val currentAgentName = agents.firstOrNull { it.id == agentId }?.name ?: agentId
 
-    var lastSaved by remember(generator.id) { mutableStateOf(generator) }
-    val draftForAutoSave =
-        generator.copy(
+    fun buildGenerator(): PaperGeneratorConfig {
+        val c = count.toIntOrNull()?.coerceIn(1, 30) ?: generator.count
+        return generator.copy(
             name = displayName.trim().ifBlank { generator.name },
             enabled = enabled,
             agentId = agentId,
             promptPreset = promptPreset.trim(),
-            count = count.toIntOrNull()?.coerceIn(1, 30) ?: generator.count,
+            count = c,
         )
-    LaunchedEffect(draftForAutoSave) {
-        if (draftForAutoSave == lastSaved) return@LaunchedEffect
-        delay(450)
-        if (draftForAutoSave != lastSaved) {
-            onSave(draftForAutoSave)
-            lastSaved = draftForAutoSave
-        }
+    }
+
+    fun persist() {
+        onSave(buildGenerator())
     }
 
     Surface(
@@ -918,13 +933,22 @@ private fun PaperGeneratorEditor(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Checkbox(checked = enabled, onCheckedChange = { enabled = it })
+                Checkbox(
+                    checked = enabled,
+                    onCheckedChange = {
+                        enabled = it
+                        persist()
+                    },
+                )
                 Text(if (enabled) "ON" else "OFF")
             }
 
             OutlinedTextField(
                 value = displayName,
-                onValueChange = { displayName = it },
+                onValueChange = {
+                    displayName = it
+                    persist()
+                },
                 label = { Text("显示名称") },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -945,7 +969,7 @@ private fun PaperGeneratorEditor(
                         agents.forEach { a ->
                             DropdownMenuItem(
                                 text = { Text(if (a.enabled) a.name else "${a.name}（OFF）") },
-                                onClick = { agentId = a.id; agentMenuOpen = false },
+                                onClick = { agentId = a.id; agentMenuOpen = false; persist() },
                             )
                         }
                     }
@@ -954,24 +978,26 @@ private fun PaperGeneratorEditor(
 
             OutlinedTextField(
                 value = promptPreset,
-                onValueChange = { promptPreset = it },
+                onValueChange = {
+                    promptPreset = it
+                    persist()
+                },
                 label = { Text("默认出题要求（可被弹窗覆盖）") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
             )
             OutlinedTextField(
                 value = count,
-                onValueChange = { count = it.filter { ch -> ch.isDigit() }.take(2) },
+                onValueChange = {
+                    count = it.filter { ch -> ch.isDigit() }.take(2)
+                    persist()
+                },
                 label = { Text("默认题目数量") },
                 singleLine = true,
                 modifier = Modifier.width(220.dp),
             )
 
-            Text(
-                "自动保存：输入停止约 0.5 秒后生效。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text("已自动保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -1034,7 +1060,6 @@ private fun ExplainerPanel(
             },
             onSave = { updated ->
                 onSave(settings.copy(explainers = settings.explainers.map { if (it.id == updated.id) updated else it }))
-                scope.launch { snackbar.showSnackbar("已保存") }
             },
             onDelete = {
                 val remain = settings.explainers.filterNot { it.id == selected.id }
@@ -1065,21 +1090,17 @@ private fun ExplainerEditor(
     var agentMenuOpen by remember(explainer.id) { mutableStateOf(false) }
     val currentAgentName = agents.firstOrNull { it.id == agentId }?.name ?: agentId
 
-    var lastSaved by remember(explainer.id) { mutableStateOf(explainer) }
-    val draftForAutoSave =
-        explainer.copy(
+    fun buildExplainer(): ExplainerConfig {
+        return explainer.copy(
             name = displayName.trim().ifBlank { explainer.name },
             enabled = enabled,
             agentId = agentId,
             style = style.trim(),
         )
-    LaunchedEffect(draftForAutoSave) {
-        if (draftForAutoSave == lastSaved) return@LaunchedEffect
-        delay(450)
-        if (draftForAutoSave != lastSaved) {
-            onSave(draftForAutoSave)
-            lastSaved = draftForAutoSave
-        }
+    }
+
+    fun persist() {
+        onSave(buildExplainer())
     }
 
     Surface(
@@ -1098,13 +1119,22 @@ private fun ExplainerEditor(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Checkbox(checked = enabled, onCheckedChange = { enabled = it })
+                Checkbox(
+                    checked = enabled,
+                    onCheckedChange = {
+                        enabled = it
+                        persist()
+                    },
+                )
                 Text(if (enabled) "ON" else "OFF")
             }
 
             OutlinedTextField(
                 value = displayName,
-                onValueChange = { displayName = it },
+                onValueChange = {
+                    displayName = it
+                    persist()
+                },
                 label = { Text("显示名称") },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -1125,7 +1155,7 @@ private fun ExplainerEditor(
                         agents.forEach { a ->
                             DropdownMenuItem(
                                 text = { Text(if (a.enabled) a.name else "${a.name}（OFF）") },
-                                onClick = { agentId = a.id; agentMenuOpen = false },
+                                onClick = { agentId = a.id; agentMenuOpen = false; persist() },
                             )
                         }
                     }
@@ -1134,17 +1164,16 @@ private fun ExplainerEditor(
 
             OutlinedTextField(
                 value = style,
-                onValueChange = { style = it },
+                onValueChange = {
+                    style = it
+                    persist()
+                },
                 label = { Text("默认讲解风格") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
             )
 
-            Text(
-                "自动保存：输入停止约 0.5 秒后生效。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text("已自动保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

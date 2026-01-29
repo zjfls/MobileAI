@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
@@ -155,8 +157,10 @@ class AppSettings(private val context: Context) {
         }
 
     suspend fun setHostBaseUrl(url: String) {
-        context.dataStore.edit { prefs ->
-            prefs[keyHostBaseUrl] = url.trim()
+        withContext(NonCancellable) {
+            context.dataStore.edit { prefs ->
+                prefs[keyHostBaseUrl] = url.trim()
+            }
         }
     }
 
@@ -179,8 +183,10 @@ class AppSettings(private val context: Context) {
         }
 
     suspend fun setAiSettings(settings: AiSettings) {
-        context.dataStore.edit { prefs ->
-            prefs[keyAiSettingsJson] = json.encodeToString(settings)
+        withContext(NonCancellable) {
+            context.dataStore.edit { prefs ->
+                prefs[keyAiSettingsJson] = json.encodeToString(settings)
+            }
         }
     }
 
