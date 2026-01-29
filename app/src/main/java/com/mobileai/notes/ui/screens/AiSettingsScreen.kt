@@ -224,12 +224,23 @@ private fun ProviderEditor(
 
     var typeMenuOpen by remember(provider.id) { mutableStateOf(false) }
     var modelsDialogOpen by remember(provider.id) { mutableStateOf(false) }
-    var models by remember(provider.id) { mutableStateOf<List<String>>(emptyList()) }
+    var models by remember(provider.id) { mutableStateOf(provider.models) }
     var modelFetchError by remember(provider.id) { mutableStateOf<String?>(null) }
 
     val openaiClient = remember { OpenAiCompatClient() }
     val anthropicClient = remember { AnthropicClient() }
     val googleClient = remember { GoogleGeminiClient() }
+
+    fun buildProvider(modelsOverride: List<String> = provider.models): AiProvider {
+        return provider.copy(
+            name = name.trim().ifEmpty { provider.name },
+            baseUrl = baseUrl.trim(),
+            apiKey = apiKey.trim(),
+            enabled = enabled,
+            type = type,
+            models = modelsOverride,
+        )
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -313,15 +324,7 @@ private fun ProviderEditor(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = {
-                        onUpdate(
-                            provider.copy(
-                                name = name.trim().ifEmpty { provider.name },
-                                baseUrl = baseUrl.trim(),
-                                apiKey = apiKey.trim(),
-                                enabled = enabled,
-                                type = type,
-                            ),
-                        )
+                        onUpdate(buildProvider(modelsOverride = provider.models))
                         scope.launch { snackbar.showSnackbar("已保存") }
                     },
                 ) { Text("保存") }
@@ -337,6 +340,7 @@ private fun ProviderEditor(
                                         AiProviderType.GOOGLE -> googleClient.listModels(baseUrl.trim(), apiKey.trim())
                                     }
                                 models = list
+                                onUpdate(buildProvider(modelsOverride = list))
                                 modelFetchError = null
                                 modelsDialogOpen = true
                             }.onFailure {
@@ -353,7 +357,7 @@ private fun ProviderEditor(
             }
 
             Text(
-                "说明：支持 OpenAI-Compatible / Anthropic / Google Gemini。Key 将保存在本机 DataStore（未加密）。",
+                "已缓存模型：${provider.models.size}；支持 OpenAI-Compatible / Anthropic / Google Gemini。Key 将保存在本机 DataStore（未加密）。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -492,6 +496,8 @@ private fun AgentPresetEditor(
 
     var providerMenuOpen by remember(preset.id) { mutableStateOf(false) }
     val currentProviderName = providerOptions.firstOrNull { it.id == providerId }?.name ?: providerId
+    val currentProvider = providerOptions.firstOrNull { it.id == providerId }
+    var modelMenuOpen by remember(preset.id) { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -548,6 +554,33 @@ private fun AgentPresetEditor(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
+                if (!currentProvider?.models.isNullOrEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "从缓存选择（${currentProvider?.models?.size ?: 0}）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Box {
+                            TextButton(onClick = { modelMenuOpen = true }) { Text("选择模型") }
+                            DropdownMenu(expanded = modelMenuOpen, onDismissRequest = { modelMenuOpen = false }) {
+                                (currentProvider?.models ?: emptyList()).take(200).forEach { m ->
+                                    DropdownMenuItem(
+                                        text = { Text(m, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        onClick = { model = m; modelMenuOpen = false },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        "提示：先在 Provider 里「获取模型」并保存，Agent 才能下拉选择。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = temperature,

@@ -33,6 +33,7 @@ data class AiProvider(
     val baseUrl: String = "https://api.openai.com/v1",
     val apiKey: String = "",
     val enabled: Boolean = true,
+    val models: List<String> = emptyList(),
 )
 
 @Serializable
