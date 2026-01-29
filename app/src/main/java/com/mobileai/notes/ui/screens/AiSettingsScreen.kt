@@ -72,6 +72,8 @@ import com.mobileai.notes.settings.AiSettings
 import com.mobileai.notes.settings.AppSettings
 import com.mobileai.notes.settings.ExplainerConfig
 import com.mobileai.notes.settings.PaperGeneratorConfig
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -84,7 +86,7 @@ fun AiSettingsScreen(
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val store = remember { AppSettings.create(context) }
-    val settings by store.aiSettings.collectAsState(initial = AiSettings())
+    val settingsOrNull by store.aiSettings.map<AiSettings, AiSettings?> { it }.collectAsState(initial = null)
 
     var tabIndex by remember { mutableStateOf(0) }
 
@@ -108,6 +110,12 @@ fun AiSettingsScreen(
                     .padding(paddingValues)
                     .padding(16.dp),
         ) {
+            val settings = settingsOrNull
+            if (settings == null) {
+                Text("读取设置中…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                return@Column
+            }
+
             TabRow(selectedTabIndex = tabIndex) {
                 Tab(selected = tabIndex == 0, onClick = { tabIndex = 0 }, text = { Text("LLM") })
                 Tab(selected = tabIndex == 1, onClick = { tabIndex = 1 }, text = { Text("Agent") })
@@ -121,25 +129,25 @@ fun AiSettingsScreen(
                 0 ->
                     ProviderPanel(
                         settings = settings,
-                        onSave = { scope.launch { store.setAiSettings(it) } },
+                        onSave = { scope.launch(start = CoroutineStart.UNDISPATCHED) { store.setAiSettings(it) } },
                         snackbar = snackbar,
                     )
                 1 ->
                     AgentPanel(
                         settings = settings,
-                        onSave = { scope.launch { store.setAiSettings(it) } },
+                        onSave = { scope.launch(start = CoroutineStart.UNDISPATCHED) { store.setAiSettings(it) } },
                         snackbar = snackbar,
                     )
                 2 ->
                     PaperGeneratorPanel(
                         settings = settings,
-                        onSave = { scope.launch { store.setAiSettings(it) } },
+                        onSave = { scope.launch(start = CoroutineStart.UNDISPATCHED) { store.setAiSettings(it) } },
                         snackbar = snackbar,
                     )
                 3 ->
                     ExplainerPanel(
                         settings = settings,
-                        onSave = { scope.launch { store.setAiSettings(it) } },
+                        onSave = { scope.launch(start = CoroutineStart.UNDISPATCHED) { store.setAiSettings(it) } },
                         snackbar = snackbar,
                     )
             }
