@@ -51,6 +51,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -74,6 +75,7 @@ import com.mobileai.notes.settings.AiSettings
 import com.mobileai.notes.settings.AppSettings
 import com.mobileai.notes.settings.ExplainerConfig
 import com.mobileai.notes.settings.PaperGeneratorConfig
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -247,6 +249,19 @@ private fun ProviderEditor(
         )
     }
 
+    // Auto-save (debounced) for text inputs and toggles.
+    var lastSaved by remember(provider.id) { mutableStateOf(provider) }
+    val draftForAutoSave = buildProvider(modelsOverride = models)
+    LaunchedEffect(draftForAutoSave) {
+        if (draftForAutoSave == lastSaved) return@LaunchedEffect
+        delay(450)
+        // Re-check after debounce; the effect will be cancelled on new input.
+        if (draftForAutoSave != lastSaved) {
+            onUpdate(draftForAutoSave)
+            lastSaved = draftForAutoSave
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.surface,
@@ -350,6 +365,7 @@ private fun ProviderEditor(
                                         val updated = models.filterNot { it == m }
                                         models = updated
                                         onUpdate(buildProvider(modelsOverride = updated))
+                                        lastSaved = buildProvider(modelsOverride = updated)
                                     },
                                 ) {
                                     Icon(Icons.Filled.Delete, contentDescription = "移除模型")
@@ -361,13 +377,6 @@ private fun ProviderEditor(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = {
-                        onUpdate(buildProvider(modelsOverride = models))
-                        scope.launch { snackbar.showSnackbar("已保存") }
-                    },
-                ) { Text("保存") }
-
                 Button(
                     onClick = { modelManualAddOpen = true },
                 ) {
@@ -502,6 +511,7 @@ private fun ProviderEditor(
                         val merged = (models + modelSelected).distinct()
                         models = merged
                         onUpdate(buildProvider(modelsOverride = merged))
+                        lastSaved = buildProvider(modelsOverride = merged)
                         modelPickerOpen = false
                         scope.launch { snackbar.showSnackbar("已添加 ${modelSelected.size} 个模型") }
                     },
@@ -540,6 +550,7 @@ private fun ProviderEditor(
                         val merged = (models + m).distinct()
                         models = merged
                         onUpdate(buildProvider(modelsOverride = merged))
+                        lastSaved = buildProvider(modelsOverride = merged)
                         manualModelInput = ""
                         modelManualAddOpen = false
                         scope.launch { snackbar.showSnackbar("已添加：$m") }
@@ -638,6 +649,29 @@ private fun AgentPresetEditor(
     val currentProviderName = providerOptions.firstOrNull { it.id == providerId }?.name ?: providerId
     val currentProvider = providerOptions.firstOrNull { it.id == providerId }
     var modelMenuOpen by remember(preset.id) { mutableStateOf(false) }
+
+    var lastSaved by remember(preset.id) { mutableStateOf(preset) }
+    val draftForAutoSave =
+        preset.copy(
+            name = displayName.trim().ifBlank { preset.name },
+            enabled = enabled,
+            config =
+                AiAgentConfig(
+                    providerId = providerId,
+                    model = model.trim(),
+                    systemPrompt = systemPrompt.trim(),
+                    temperature = temperature.toFloatOrNull()?.coerceIn(0f, 2f) ?: preset.config.temperature,
+                    maxTokens = maxTokens.toIntOrNull()?.coerceIn(128, 8192) ?: preset.config.maxTokens,
+                ),
+        )
+    LaunchedEffect(draftForAutoSave) {
+        if (draftForAutoSave == lastSaved) return@LaunchedEffect
+        delay(450)
+        if (draftForAutoSave != lastSaved) {
+            onSave(draftForAutoSave)
+            lastSaved = draftForAutoSave
+        }
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -746,26 +780,11 @@ private fun AgentPresetEditor(
                 )
             }
 
-            Button(
-                onClick = {
-                    val t = temperature.toFloatOrNull()?.coerceIn(0f, 2f) ?: preset.config.temperature
-                    val m = maxTokens.toIntOrNull()?.coerceIn(128, 8192) ?: preset.config.maxTokens
-                    onSave(
-                        preset.copy(
-                            name = displayName.trim().ifBlank { preset.name },
-                            enabled = enabled,
-                            config =
-                                AiAgentConfig(
-                                    providerId = providerId,
-                                    model = model.trim(),
-                                    systemPrompt = systemPrompt.trim(),
-                                    temperature = t,
-                                    maxTokens = m,
-                                ),
-                        ),
-                    )
-                },
-            ) { Text("保存") }
+            Text(
+                "自动保存：输入停止约 0.5 秒后生效。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -865,6 +884,24 @@ private fun PaperGeneratorEditor(
     var agentMenuOpen by remember(generator.id) { mutableStateOf(false) }
     val currentAgentName = agents.firstOrNull { it.id == agentId }?.name ?: agentId
 
+    var lastSaved by remember(generator.id) { mutableStateOf(generator) }
+    val draftForAutoSave =
+        generator.copy(
+            name = displayName.trim().ifBlank { generator.name },
+            enabled = enabled,
+            agentId = agentId,
+            promptPreset = promptPreset.trim(),
+            count = count.toIntOrNull()?.coerceIn(1, 30) ?: generator.count,
+        )
+    LaunchedEffect(draftForAutoSave) {
+        if (draftForAutoSave == lastSaved) return@LaunchedEffect
+        delay(450)
+        if (draftForAutoSave != lastSaved) {
+            onSave(draftForAutoSave)
+            lastSaved = draftForAutoSave
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.surface,
@@ -930,19 +967,11 @@ private fun PaperGeneratorEditor(
                 modifier = Modifier.width(220.dp),
             )
 
-            Button(
-                onClick = {
-                    onSave(
-                        generator.copy(
-                            name = displayName.trim().ifBlank { generator.name },
-                            enabled = enabled,
-                            agentId = agentId,
-                            promptPreset = promptPreset.trim(),
-                            count = count.toIntOrNull()?.coerceIn(1, 30) ?: generator.count,
-                        ),
-                    )
-                },
-            ) { Text("保存") }
+            Text(
+                "自动保存：输入停止约 0.5 秒后生效。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -1036,6 +1065,23 @@ private fun ExplainerEditor(
     var agentMenuOpen by remember(explainer.id) { mutableStateOf(false) }
     val currentAgentName = agents.firstOrNull { it.id == agentId }?.name ?: agentId
 
+    var lastSaved by remember(explainer.id) { mutableStateOf(explainer) }
+    val draftForAutoSave =
+        explainer.copy(
+            name = displayName.trim().ifBlank { explainer.name },
+            enabled = enabled,
+            agentId = agentId,
+            style = style.trim(),
+        )
+    LaunchedEffect(draftForAutoSave) {
+        if (draftForAutoSave == lastSaved) return@LaunchedEffect
+        delay(450)
+        if (draftForAutoSave != lastSaved) {
+            onSave(draftForAutoSave)
+            lastSaved = draftForAutoSave
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.surface,
@@ -1094,18 +1140,11 @@ private fun ExplainerEditor(
                 minLines = 3,
             )
 
-            Button(
-                onClick = {
-                    onSave(
-                        explainer.copy(
-                            name = displayName.trim().ifBlank { explainer.name },
-                            enabled = enabled,
-                            agentId = agentId,
-                            style = style.trim(),
-                        ),
-                    )
-                },
-            ) { Text("保存") }
+            Text(
+                "自动保存：输入停止约 0.5 秒后生效。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
