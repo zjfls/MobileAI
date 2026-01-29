@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -40,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -55,6 +58,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.TextButton
+import com.mobileai.notes.ui.widgets.VerticalScrollbar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -189,76 +193,79 @@ fun HomeScreen(
             Text("最近", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(10.dp))
 
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 240.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    if (documents.isEmpty()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface,
-                            shape = MaterialTheme.shapes.extraLarge,
-                            tonalElevation = 1.dp,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Icon(Icons.Filled.Description, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(
-                                    "还没有文档：试试右上角新建或导入",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                    }
-                }
-
-                items(documents, key = { it.id }) { doc ->
-                    ElevatedCard(
-                        onClick = { onOpenDocument(doc.id) },
-                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(
-                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
+            val gridState = rememberLazyGridState()
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Adaptive(minSize = 240.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize().padding(end = 12.dp),
+                ) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        if (documents.isEmpty()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = MaterialTheme.shapes.extraLarge,
+                                tonalElevation = 1.dp,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Surface(
-                                        modifier = Modifier.size(36.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                        contentColor = MaterialTheme.colorScheme.primary,
-                                        shape = MaterialTheme.shapes.large,
-                                    ) {
-                                        Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
-                                            val icon =
-                                                when (doc.type) {
-                                                    DocumentType.BLANK -> Icons.Filled.NoteAdd
-                                                    DocumentType.PDF -> Icons.Filled.PictureAsPdf
-                                                    DocumentType.WORKSHEET -> Icons.Filled.AutoAwesome
-                                                }
-                                            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        }
-                                    }
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Icon(Icons.Filled.Description, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text(
-                                        when (doc.type) {
-                                            DocumentType.BLANK -> "笔记"
-                                            DocumentType.PDF -> "PDF"
-                                            DocumentType.WORKSHEET -> "试卷"
-                                        },
-                                        style = MaterialTheme.typography.labelLarge,
+                                        "还没有文档：试试右上角新建或导入",
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                        }
+                    }
+
+                    items(documents, key = { it.id }) { doc ->
+                        ElevatedCard(
+                            onClick = { onOpenDocument(doc.id) },
+                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Surface(
+                                            modifier = Modifier.size(36.dp),
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                            contentColor = MaterialTheme.colorScheme.primary,
+                                            shape = MaterialTheme.shapes.large,
+                                        ) {
+                                            Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
+                                                val icon =
+                                                    when (doc.type) {
+                                                        DocumentType.BLANK -> Icons.Filled.NoteAdd
+                                                        DocumentType.PDF -> Icons.Filled.PictureAsPdf
+                                                        DocumentType.WORKSHEET -> Icons.Filled.AutoAwesome
+                                                    }
+                                                Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+                                        Text(
+                                            when (doc.type) {
+                                                DocumentType.BLANK -> "笔记"
+                                                DocumentType.PDF -> "PDF"
+                                                DocumentType.WORKSHEET -> "试卷"
+                                            },
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 DocumentOverflowMenu(
                                     onRename = {
                                         renameTargetId = doc.id
@@ -285,7 +292,19 @@ fun HomeScreen(
                         }
                     }
                 }
+
             }
+
+            VerticalScrollbar(
+                state = gridState,
+                modifier =
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .padding(vertical = 12.dp)
+                        .padding(end = 6.dp)
+                        .width(6.dp),
+            )
         }
     }
 
@@ -301,6 +320,9 @@ fun HomeScreen(
         )
     }
 }
+
+}
+
 
 @Composable
 private fun DocumentOverflowMenu(

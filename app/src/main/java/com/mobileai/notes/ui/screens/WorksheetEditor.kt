@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
@@ -58,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.mobileai.notes.data.DocumentEntity
 import com.mobileai.notes.data.PageTemplate
 import com.mobileai.notes.data.ToolKind
+import com.mobileai.notes.ui.widgets.VerticalScrollbar
 import com.mobileai.notes.data.WorksheetNote
 import com.mobileai.notes.data.WorksheetPage
 import com.mobileai.notes.export.ExportManager
@@ -154,49 +157,64 @@ fun WorksheetEditor(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
                 )
-                LazyColumn(
-                    modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    itemsIndexed(worksheet.pages) { idx, p ->
-                        val selected = idx == pageIndex
-                        Surface(
-                            color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surface,
-                            shape = MaterialTheme.shapes.large,
-                            tonalElevation = if (selected) 2.dp else 0.dp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { pageIndex = idx }
-                                .padding(0.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                val pageListState = rememberLazyListState()
+                Box(modifier = Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                    LazyColumn(
+                        state = pageListState,
+                        modifier = Modifier.fillMaxSize().padding(end = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        itemsIndexed(worksheet.pages) { idx, p ->
+                            val selected = idx == pageIndex
+                            Surface(
+                                color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surface,
+                                shape = MaterialTheme.shapes.large,
+                                tonalElevation = if (selected) 2.dp else 0.dp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { pageIndex = idx }
+                                    .padding(0.dp),
                             ) {
-                                Icon(
-                                    Icons.Filled.Description,
-                                    contentDescription = null,
-                                    tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        p.title ?: "Page ${idx + 1}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Description,
+                                        contentDescription = null,
+                                        tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    if (!p.backgroundImageUri.isNullOrBlank()) {
+                                    Column(Modifier.weight(1f)) {
                                         Text(
-                                            "题目图片",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            p.title ?: "Page ${idx + 1}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                         )
+                                        if (!p.backgroundImageUri.isNullOrBlank()) {
+                                            Text(
+                                                "题目图片",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+
+                    VerticalScrollbar(
+                        state = pageListState,
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .padding(vertical = 12.dp)
+                                .padding(end = 6.dp)
+                                .width(6.dp),
+                    )
                 }
 
                 Text(
