@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -72,6 +74,7 @@ import com.mobileai.notes.settings.AiSettings
 import com.mobileai.notes.settings.AppSettings
 import com.mobileai.notes.settings.ExplainerConfig
 import com.mobileai.notes.settings.PaperGeneratorConfig
+import com.mobileai.notes.ui.widgets.VerticalScrollbar
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -263,7 +266,7 @@ private fun ProviderEditor(
         shape = MaterialTheme.shapes.extraLarge,
         tonalElevation = 1.dp,
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -358,36 +361,53 @@ private fun ProviderEditor(
             )
 
             Text("模型列表（已添加）", style = MaterialTheme.typography.labelLarge)
+            val modelListState = remember(provider.id) { LazyListState() }
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = MaterialTheme.shapes.large,
-                modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f).heightIn(min = 160.dp),
             ) {
-                if (models.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                        Text("暂无模型，请先「获取模型」或「手动添加」。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                        items(models, key = { it }) { m ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Text(m, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                IconButton(
-                                    onClick = {
-                                        val updated = models.filterNot { it == m }
-                                        models = updated
-                                        persist(modelsOverride = updated)
-                                    },
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (models.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                            Text("暂无模型，请先「获取模型」或「手动添加」。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        LazyColumn(
+                            state = modelListState,
+                            modifier = Modifier.fillMaxSize().padding(vertical = 6.dp).padding(end = 12.dp),
+                        ) {
+                            items(models, key = { it }) { m ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "移除模型")
+                                    Text(m, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    IconButton(
+                                        onClick = {
+                                            val updated = models.filterNot { it == m }
+                                            models = updated
+                                            persist(modelsOverride = updated)
+                                        },
+                                    ) {
+                                        Icon(Icons.Filled.Delete, contentDescription = "移除模型")
+                                    }
                                 }
                             }
                         }
                     }
+
+                    VerticalScrollbar(
+                        state = modelListState,
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .padding(vertical = 12.dp)
+                                .padding(end = 6.dp)
+                                .width(6.dp),
+                    )
                 }
             }
 
@@ -490,30 +510,47 @@ private fun ProviderEditor(
                             }
                         }
 
+                        val fetchedListState = rememberLazyListState()
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = MaterialTheme.shapes.large,
                             modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
                         ) {
-                            LazyColumn(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                                items(filtered, key = { it }) { m ->
-                                    val checked = modelSelected.contains(m)
-                                    Row(
-                                        modifier =
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    modelSelected =
-                                                        if (checked) modelSelected - m else modelSelected + m
-                                                }
-                                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        Checkbox(checked = checked, onCheckedChange = null)
-                                        Text(m, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Box(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                                LazyColumn(
+                                    state = fetchedListState,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).padding(end = 12.dp),
+                                ) {
+                                    items(filtered, key = { it }) { m ->
+                                        val checked = modelSelected.contains(m)
+                                        Row(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        modelSelected =
+                                                            if (checked) modelSelected - m else modelSelected + m
+                                                    }
+                                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        ) {
+                                            Checkbox(checked = checked, onCheckedChange = null)
+                                            Text(m, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
                                     }
                                 }
+
+                                VerticalScrollbar(
+                                    state = fetchedListState,
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.CenterEnd)
+                                            .fillMaxHeight()
+                                            .padding(vertical = 12.dp)
+                                            .padding(end = 6.dp)
+                                            .width(6.dp),
+                                )
                             }
                         }
                     }
@@ -1209,29 +1246,47 @@ private fun LeftList(
                 IconButton(onClick = onAdd) { Icon(Icons.Filled.Add, contentDescription = "新增") }
             }
             Divider()
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(items, key = { it.first }) { (id, name) ->
-                    val selected = id == selectedId
-                    Card(
-                        modifier = Modifier.fillMaxWidth().clickable { onSelect(id) },
-                        colors =
-                            CardDefaults.cardColors(
-                                containerColor =
-                                    if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                                contentColor =
-                                    if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                            ),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+            val listState = rememberLazyListState()
+            Box(modifier = Modifier.weight(1f)) {
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize().padding(end = 12.dp),
+                ) {
+                    items(items, key = { it.first }) { (id, name) ->
+                        val selected = id == selectedId
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable { onSelect(id) },
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor =
+                                        if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                    contentColor =
+                                        if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                ),
                         ) {
-                            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (selected) Text("编辑", style = MaterialTheme.typography.labelSmall)
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (selected) Text("编辑", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }
+
+                VerticalScrollbar(
+                    state = listState,
+                    modifier =
+                        Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .padding(vertical = 12.dp)
+                            .padding(end = 6.dp)
+                            .width(6.dp),
+                )
             }
         }
     }
