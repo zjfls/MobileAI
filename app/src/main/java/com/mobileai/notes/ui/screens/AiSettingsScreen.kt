@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -53,6 +54,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -111,7 +113,8 @@ fun AiSettingsScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(16.dp),
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .imePadding(),
         ) {
             val settings = settingsOrNull
             if (settings == null) {
@@ -126,7 +129,7 @@ fun AiSettingsScreen(
                 Tab(selected = tabIndex == 3, onClick = { tabIndex = 3 }, text = { Text("讲解器") })
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
 
             when (tabIndex) {
                 0 ->
@@ -260,69 +263,70 @@ private fun ProviderEditor(
         onUpdate(buildProvider(modelsOverride = modelsOverride))
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 1.dp,
-    ) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Provider 配置", style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = enabled,
-                        onCheckedChange = {
-                            enabled = it
-                            persist()
-                        },
-                    )
-                    Text(if (enabled) "ON" else "OFF")
-                    IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "删除") }
-                }
-            }
-
-            Text("类型", style = MaterialTheme.typography.labelLarge)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value =
-                        when (type) {
-                            AiProviderType.OPENAI_COMPATIBLE -> "OpenAI Compatible"
-                            AiProviderType.ANTHROPIC -> "Anthropic"
-                            AiProviderType.GOOGLE -> "Google (Gemini)"
-                        },
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Provider 类型") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                )
-                Box {
-                    TextButton(onClick = { typeMenuOpen = true }) { Text("选择") }
-                    DropdownMenu(expanded = typeMenuOpen, onDismissRequest = { typeMenuOpen = false }) {
-                        fun pick(t: AiProviderType) {
-                            type = t
-                            // Best-effort baseUrl suggestion.
-                            val suggested =
-                                when (t) {
-                                    AiProviderType.OPENAI_COMPATIBLE -> "https://api.openai.com/v1"
-                                    AiProviderType.ANTHROPIC -> "https://api.anthropic.com"
-                                    AiProviderType.GOOGLE -> "https://generativelanguage.googleapis.com"
-                                }
-                            if (baseUrl.isBlank() || baseUrl == provider.baseUrl) baseUrl = suggested
-                            typeMenuOpen = false
-                            persist()
-                        }
-                        DropdownMenuItem(text = { Text("OpenAI Compatible") }, onClick = { pick(AiProviderType.OPENAI_COMPATIBLE) })
-                        DropdownMenuItem(text = { Text("Anthropic") }, onClick = { pick(AiProviderType.ANTHROPIC) })
-                        DropdownMenuItem(text = { Text("Google (Gemini)") }, onClick = { pick(AiProviderType.GOOGLE) })
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Surface(
+            modifier = Modifier.fillMaxSize().fillMaxWidth().widthIn(max = 900.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shape = MaterialTheme.shapes.extraLarge,
+            tonalElevation = 1.dp,
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Provider 配置", style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = enabled,
+                            onCheckedChange = {
+                                enabled = it
+                                persist()
+                            },
+                        )
+                        Text(if (enabled) "ON" else "OFF")
+                        IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "删除") }
                     }
                 }
-            }
+
+                Text("类型", style = MaterialTheme.typography.labelLarge)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value =
+                            when (type) {
+                                AiProviderType.OPENAI_COMPATIBLE -> "OpenAI Compatible"
+                                AiProviderType.ANTHROPIC -> "Anthropic"
+                                AiProviderType.GOOGLE -> "Google (Gemini)"
+                            },
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Provider 类型") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                    )
+                    Box {
+                        TextButton(onClick = { typeMenuOpen = true }) { Text("选择") }
+                        DropdownMenu(expanded = typeMenuOpen, onDismissRequest = { typeMenuOpen = false }) {
+                            fun pick(t: AiProviderType) {
+                                type = t
+                                // Best-effort baseUrl suggestion.
+                                val suggested =
+                                    when (t) {
+                                        AiProviderType.OPENAI_COMPATIBLE -> "https://api.openai.com/v1"
+                                        AiProviderType.ANTHROPIC -> "https://api.anthropic.com"
+                                        AiProviderType.GOOGLE -> "https://generativelanguage.googleapis.com"
+                                    }
+                                if (baseUrl.isBlank() || baseUrl == provider.baseUrl) baseUrl = suggested
+                                typeMenuOpen = false
+                                persist()
+                            }
+                            DropdownMenuItem(text = { Text("OpenAI Compatible") }, onClick = { pick(AiProviderType.OPENAI_COMPATIBLE) })
+                            DropdownMenuItem(text = { Text("Anthropic") }, onClick = { pick(AiProviderType.ANTHROPIC) })
+                            DropdownMenuItem(text = { Text("Google (Gemini)") }, onClick = { pick(AiProviderType.GOOGLE) })
+                        }
+                    }
+                }
 
             OutlinedTextField(
                 value = name,
@@ -448,11 +452,12 @@ private fun ProviderEditor(
                 }
             }
 
-            Text(
-                "已添加模型：${models.size}；支持 OpenAI-Compatible / Anthropic / Google Gemini。Key 将保存在本机 DataStore（未加密）。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+                Text(
+                    "已添加模型：${models.size}；支持 OpenAI-Compatible / Anthropic / Google Gemini。Key 将保存在本机 DataStore（未加密）。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 
@@ -698,6 +703,7 @@ private fun AgentPresetEditor(
     val currentProviderName = providerOptions.firstOrNull { it.id == providerId }?.name ?: providerId
     val currentProvider = providerOptions.firstOrNull { it.id == providerId }
     var modelMenuOpen by remember(preset.id) { mutableStateOf(false) }
+    val modelOptions = remember(providerId, currentProvider?.models) { (currentProvider?.models ?: emptyList()).distinct() }
 
     fun buildPreset(): AiAgentPreset {
         val t = temperature.toFloatOrNull()?.coerceIn(0f, 2f) ?: preset.config.temperature
@@ -720,40 +726,47 @@ private fun AgentPresetEditor(
         onSave(buildPreset())
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 1.dp,
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Agent 配置", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "删除") }
-            }
+    LaunchedEffect(preset.id, providerId, modelOptions) {
+        if (modelOptions.isNotEmpty() && model !in modelOptions) {
+            model = modelOptions.first()
+            persist()
+        }
+    }
 
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Checkbox(
-                    checked = enabled,
-                    onCheckedChange = {
-                        enabled = it
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Surface(
+            modifier = Modifier.fillMaxSize().fillMaxWidth().widthIn(max = 900.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shape = MaterialTheme.shapes.extraLarge,
+            tonalElevation = 1.dp,
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Agent 配置", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "删除") }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Checkbox(
+                        checked = enabled,
+                        onCheckedChange = {
+                            enabled = it
+                            persist()
+                        },
+                    )
+                    Text(if (enabled) "ON" else "OFF")
+                }
+
+                OutlinedTextField(
+                    value = displayName,
+                    onValueChange = {
+                        displayName = it
                         persist()
                     },
+                    label = { Text("显示名称") },
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                Text(if (enabled) "ON" else "OFF")
-            }
 
-            OutlinedTextField(
-                value = displayName,
-                onValueChange = {
-                    displayName = it
-                    persist()
-                },
-                label = { Text("显示名称") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("LLM 配置", style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
@@ -770,35 +783,35 @@ private fun AgentPresetEditor(
                             providerOptions.forEach { p ->
                                 DropdownMenuItem(
                                     text = { Text(if (p.enabled) p.name else "${p.name}（OFF）") },
-                                    onClick = { providerId = p.id; providerMenuOpen = false; persist() },
+                                    onClick = {
+                                        providerId = p.id
+                                        providerMenuOpen = false
+                                        val firstModel = p.models.firstOrNull()
+                                        if (!firstModel.isNullOrBlank() && model !in p.models) {
+                                            model = firstModel
+                                        }
+                                        persist()
+                                    },
                                 )
                             }
                         }
                     }
                 }
 
-                OutlinedTextField(
-                    value = model,
-                    onValueChange = {
-                        model = it
-                        persist()
-                    },
-                    label = { Text("模型") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                if (!currentProvider?.models.isNullOrEmpty()) {
+                if (modelOptions.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            "从缓存选择（${currentProvider?.models?.size ?: 0}）",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        OutlinedTextField(
+                            value = model,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("模型（从 Provider 模型库选择）") },
                             modifier = Modifier.weight(1f),
+                            singleLine = true,
                         )
                         Box {
-                            TextButton(onClick = { modelMenuOpen = true }) { Text("选择模型") }
+                            TextButton(onClick = { modelMenuOpen = true }) { Text("选择") }
                             DropdownMenu(expanded = modelMenuOpen, onDismissRequest = { modelMenuOpen = false }) {
-                                (currentProvider?.models ?: emptyList()).take(200).forEach { m ->
+                                modelOptions.take(300).forEach { m ->
                                     DropdownMenuItem(
                                         text = { Text(m, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                         onClick = { model = m; modelMenuOpen = false; persist() },
@@ -808,12 +821,23 @@ private fun AgentPresetEditor(
                         }
                     }
                 } else {
+                    OutlinedTextField(
+                        value = model,
+                        onValueChange = {
+                            model = it
+                            persist()
+                        },
+                        label = { Text("模型") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
                     Text(
-                        "提示：先在 Provider 里「获取模型」并添加，Agent 才能下拉选择。",
+                        "提示：先在 Provider 里「获取模型」并添加到该 Provider 的「模型列表（已添加）」，Agent 才能在这里下拉选择。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = temperature,
@@ -836,6 +860,7 @@ private fun AgentPresetEditor(
                         singleLine = true,
                     )
                 }
+
                 OutlinedTextField(
                     value = systemPrompt,
                     onValueChange = {
@@ -843,12 +868,12 @@ private fun AgentPresetEditor(
                         persist()
                     },
                     label = { Text("系统提示词（System Prompt）") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 6,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    minLines = 10,
                 )
-            }
 
-            Text("已自动保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("已自动保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
@@ -962,13 +987,21 @@ private fun PaperGeneratorEditor(
         onSave(buildGenerator())
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 1.dp,
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LaunchedEffect(generator.id, agents) {
+        if (agents.isNotEmpty() && agents.none { it.id == agentId }) {
+            agentId = agents.first().id
+            persist()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Surface(
+            modifier = Modifier.fillMaxSize().fillMaxWidth().widthIn(max = 900.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shape = MaterialTheme.shapes.extraLarge,
+            tonalElevation = 1.dp,
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("生题器配置", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = onSetDefault) {
@@ -1028,8 +1061,8 @@ private fun PaperGeneratorEditor(
                     persist()
                 },
                 label = { Text("默认出题要求（可被弹窗覆盖）") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                minLines = 6,
             )
             OutlinedTextField(
                 value = count,
@@ -1043,6 +1076,7 @@ private fun PaperGeneratorEditor(
             )
 
             Text("已自动保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
@@ -1148,13 +1182,21 @@ private fun ExplainerEditor(
         onSave(buildExplainer())
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 1.dp,
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LaunchedEffect(explainer.id, agents) {
+        if (agents.isNotEmpty() && agents.none { it.id == agentId }) {
+            agentId = agents.first().id
+            persist()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Surface(
+            modifier = Modifier.fillMaxSize().fillMaxWidth().widthIn(max = 900.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shape = MaterialTheme.shapes.extraLarge,
+            tonalElevation = 1.dp,
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("讲解器配置", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = onSetDefault) {
@@ -1214,11 +1256,12 @@ private fun ExplainerEditor(
                     persist()
                 },
                 label = { Text("默认讲解风格") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                minLines = 6,
             )
 
             Text("已自动保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
@@ -1232,11 +1275,11 @@ private fun LeftList(
     onAdd: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.widthIn(min = 220.dp, max = 360.dp).fillMaxHeight(),
+        modifier = Modifier.widthIn(min = 190.dp, max = 280.dp).fillMaxHeight(),
         shape = MaterialTheme.shapes.extraLarge,
         tonalElevation = 1.dp,
     ) {
-        Column(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
