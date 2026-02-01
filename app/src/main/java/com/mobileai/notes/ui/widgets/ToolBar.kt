@@ -42,14 +42,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.AutoFixOff
 import androidx.compose.material.icons.filled.BorderColor
-import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.AutoFixOff
 import androidx.compose.material.icons.outlined.BorderColor
-import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.outlined.Undo
@@ -74,6 +74,16 @@ fun ToolBar(
     val scrollState = rememberScrollState()
     var customColorOpen by remember { mutableStateOf(false) }
     var customColorText by remember { mutableStateOf("FF111111") }
+    val sizeLabel =
+        if (isEraser) {
+            "橡皮"
+        } else {
+            when (tool) {
+                ToolKind.PEN -> "钢笔"
+                ToolKind.PENCIL -> "铅笔"
+                ToolKind.HIGHLIGHTER -> "荧光笔"
+            }
+        }
 
     Surface(
         modifier = modifier,
@@ -129,8 +139,8 @@ fun ToolBar(
             )
             ToolIconButton(
                 selected = isEraser,
-                iconSelected = Icons.Filled.Brush,
-                icon = Icons.Outlined.Brush,
+                iconSelected = Icons.Filled.AutoFixOff,
+                icon = Icons.Outlined.AutoFixOff,
                 label = "橡皮",
                 onClick = {
                     OppoPenKit.tryToolSwitchVibration(isEraser = true)
@@ -160,7 +170,7 @@ fun ToolBar(
                     valueRange = 2f..22f,
                 )
                 Text(
-                    text = "粗细 ${size.toInt()}",
+                    text = "$sizeLabel 粗细 ${size.toInt()}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp),

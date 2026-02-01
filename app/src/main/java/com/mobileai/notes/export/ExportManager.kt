@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.text.Layout
@@ -24,6 +26,8 @@ import java.io.ByteArrayOutputStream
 import kotlin.math.roundToInt
 
 object ExportManager {
+    private const val AI_EXPORT_MAX_QUESTION_CHARS = 1600
+
     suspend fun exportDocumentPdf(
         context: Context,
         doc: DocumentEntity,
@@ -69,35 +73,105 @@ object ExportManager {
         context: Context,
         doc: DocumentEntity,
         pageIndex: Int,
-        scale: Float = 2f,
+        scale: Float = 0.5f,
     ): ByteArray? {
         require(doc.type == DocumentType.WORKSHEET)
         val worksheet = doc.worksheet ?: WorksheetNote()
         val page = worksheet.pages.getOrNull(pageIndex) ?: return null
 
-        val bg = page.backgroundImageUri?.let { decodeBitmap(context, it) }
-        val baseW = (page.canvasWidthPx.takeIf { it > 0 } ?: bg?.width ?: 1200).toFloat()
-        val baseH = (page.canvasHeightPx.takeIf { it > 0 } ?: bg?.height ?: (1200 * 1.4142f)).toFloat()
-        val outW = (baseW * scale).roundToInt().coerceAtLeast(1)
-        val outH = (baseH * scale).roundToInt().coerceAtLeast(1)
+        // IMPORTANT: This image is used for multimodal "AI 解答".
+        // The worksheet page is scrollable; capturing just the visible viewport will miss content.
+        // So we render the FULL logical canvas here (enough to include all strokes).
+        //
+        // Question text is already sent as plain text in the prompt; do NOT attempt to "screenshot" the overlay.
+        val baseW0 = (page.canvasWidthPx.takeIf { it > 0 } ?: 1200).toFloat()
+        val baseH0 = (page.canvasHeightPx.takeIf { it > 0 } ?: (1200 * 1.4142f)).toFloat()
+        val strokeBounds = computeStrokeBounds(page.strokes)
+        val marginBottom = 220f
+        val baseH =
+            maxOf(
+                baseH0,
+                ((strokeBounds?.bottom ?: 0f) + marginBottom).coerceAtLeast(1f),
+            )
+        val baseW = baseW0.coerceAtLeast(1f)
+        val cropRect = RectF(0f, 0f, baseW, baseH)
+        val cropW = baseW
+        val cropH = baseH
+
+        val maxLongEdgePx = 2200f
+        val maxPixels = 3_000_000f
+
+        var effectiveScale = scale.coerceAtLeast(0.05f)
+        run {
+            val outW0 = cropW * effectiveScale
+            val outH0 = cropH * effectiveScale
+            val longEdge0 = maxOf(outW0, outH0)
+            if (longEdge0 > maxLongEdgePx) effectiveScale *= maxLongEdgePx / longEdge0
+        }
+        run {
+            val outPixels0 = (cropW * effectiveScale) * (cropH * effectiveScale)
+            if (outPixels0 > maxPixels) {
+                val factor = kotlin.math.sqrt(maxPixels / outPixels0)
+                effectiveScale *= factor
+            }
+        }
+        effectiveScale = effectiveScale.coerceAtLeast(0.05f)
+
+        val outW = (cropW * effectiveScale).roundToInt().coerceAtLeast(1)
+        val outH = (cropH * effectiveScale).roundToInt().coerceAtLeast(1)
 
         val bitmap = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(0xFFFFFFFF.toInt())
         val canvas = Canvas(bitmap)
 
-        // Background (image) or template.
-        if (bg != null) {
-            val srcW = bg.width.toFloat().coerceAtLeast(1f)
-            val srcH = bg.height.toFloat().coerceAtLeast(1f)
-            val m = Matrix().apply { setScale(outW / srcW, outH / srcH) }
-            canvas.drawBitmap(bg, m, Paint(Paint.FILTER_BITMAP_FLAG))
-            bg.recycle()
-        } else {
-            drawTemplate(canvas, worksheet.template, scale)
+        // Always render the notebook template as background.
+        drawTemplate(canvas, worksheet.template, effectiveScale)
+
+        // For QUESTION pages, render the question itself into the exported image.
+        // The question overlay in UI is scrollable; sending it as text can conflict with "image-based" workflows.
+        // This is a pragmatic rendering: if there is a background image, draw it; otherwise draw a text box.
+        if (page.type == com.mobileai.notes.data.WorksheetPageType.QUESTION) {
+            val bgQuestion = page.backgroundImageUri?.let { decodeBitmap(context, it) }
+            if (bgQuestion != null) {
+                val pad = 18f * effectiveScale
+                val maxW = (outW - pad * 2f).coerceAtLeast(1f)
+                val maxH = (outH * 0.45f).coerceAtLeast(1f)
+                val sx = maxW / bgQuestion.width.toFloat().coerceAtLeast(1f)
+                val sy = maxH / bgQuestion.height.toFloat().coerceAtLeast(1f)
+                val s = minOf(sx, sy, 1.0f)
+                val dstW = (bgQuestion.width * s).roundToInt().coerceAtLeast(1)
+                val dstH = (bgQuestion.height * s).roundToInt().coerceAtLeast(1)
+                val dst =
+                    Rect(
+                        pad.roundToInt(),
+                        pad.roundToInt(),
+                        (pad + dstW).roundToInt(),
+                        (pad + dstH).roundToInt(),
+                    )
+                canvas.drawBitmap(bgQuestion, null, dst, Paint(Paint.FILTER_BITMAP_FLAG))
+                bgQuestion.recycle()
+            } else {
+                val text =
+                    page.questionText
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { t -> if (t.length > AI_EXPORT_MAX_QUESTION_CHARS) t.take(AI_EXPORT_MAX_QUESTION_CHARS) + "…" else t }
+                if (!text.isNullOrBlank()) {
+                    drawWorksheetHeader(canvas, page.title, text, effectiveScale)
+                }
+            }
         }
 
-        drawWorksheetHeader(canvas, page.title, page.questionText, scale)
-        drawStrokes(canvas, page.strokes, scaleX = outW / baseW, scaleY = outH / baseH)
+        val scaleX = outW / cropW
+        val scaleY = outH / cropH
+        drawStrokes(
+            canvas = canvas,
+            strokes = page.strokes,
+            scaleX = scaleX,
+            scaleY = scaleY,
+            translateX = -cropRect.left * scaleX,
+            translateY = -cropRect.top * scaleY,
+        )
 
         return withContext(Dispatchers.IO) {
             ByteArrayOutputStream().use { baos ->
@@ -171,7 +245,12 @@ object ExportManager {
                     drawTemplate(canvas, worksheet.template, scale)
                 }
 
-                drawWorksheetHeader(canvas, page.title, page.questionText, scale)
+                val headerText =
+                    when (page.type) {
+                        com.mobileai.notes.data.WorksheetPageType.QUESTION -> page.questionText
+                        com.mobileai.notes.data.WorksheetPageType.ANSWER -> page.answerText
+                    }
+                drawWorksheetHeader(canvas, page.title, headerText, scale)
                 drawStrokes(canvas, page.strokes, scaleX = outW / baseW, scaleY = outH / baseH)
                 pdfDocument.finishPage(pdfPage)
             }
@@ -311,14 +390,38 @@ object ExportManager {
         strokes: List<com.mobileai.notes.data.StrokeDto>,
         scaleX: Float,
         scaleY: Float,
+        translateX: Float = 0f,
+        translateY: Float = 0f,
     ) {
         if (strokes.isEmpty()) return
         val renderer = CanvasStrokeRenderer.create()
-        val m = Matrix().apply { setScale(scaleX, scaleY) }
+        val m =
+            Matrix().apply {
+                setScale(scaleX, scaleY)
+                postTranslate(translateX, translateY)
+            }
         val inkStrokes = strokes.map(InkInterop::dtoToStroke)
         inkStrokes.forEach { s ->
             renderer.draw(canvas, s, m)
         }
+    }
+
+    private fun computeStrokeBounds(strokes: List<com.mobileai.notes.data.StrokeDto>): RectF? {
+        var bounds: RectF? = null
+        for (s in strokes) {
+            for (p in s.points) {
+                val x = p.x
+                val y = p.y
+                if (!x.isFinite() || !y.isFinite()) continue
+                val b = bounds
+                if (b == null) {
+                    bounds = RectF(x, y, x, y)
+                } else {
+                    b.union(x, y)
+                }
+            }
+        }
+        return bounds
     }
 
     private fun decodeBitmap(context: Context, uriString: String): Bitmap? {

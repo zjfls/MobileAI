@@ -1,15 +1,27 @@
 package com.mobileai.notes.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -19,6 +31,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,7 +43,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
@@ -42,6 +59,7 @@ import com.mobileai.notes.data.ToolKind
 import com.mobileai.notes.data.WorksheetNote
 import com.mobileai.notes.data.WorksheetPage
 import com.mobileai.notes.export.ExportManager
+import com.mobileai.notes.ink.InkFeel
 import com.mobileai.notes.oppo.OppoPenKit
 import com.mobileai.notes.ui.widgets.ToolBar
 import kotlinx.coroutines.Job
@@ -61,6 +79,7 @@ private sealed interface ExportRequest {
 fun EditorScreen(
     store: DocumentStore,
     docId: String,
+    openGenerateOnStart: Boolean = false,
     onBack: () -> Unit,
     onOpenAiSettings: () -> Unit,
 ) {
@@ -80,8 +99,15 @@ fun EditorScreen(
     val toolKindState = remember { mutableStateOf(ToolKind.PEN) }
     val isEraserState = remember { mutableStateOf(false) }
     val colorArgbState = remember { mutableLongStateOf(0xFF111111) }
-    val sizeState = remember { mutableFloatStateOf(6f) }
+    var penSize by remember { mutableFloatStateOf(6f) }
+    var pencilSize by remember { mutableFloatStateOf(6f) }
+    var highlighterSize by remember { mutableFloatStateOf(10f) }
+    var eraserSize by remember { mutableFloatStateOf(14f) }
     var simulatePressureWithSizeSlider by remember { mutableStateOf(true) }
+    var inkFeel by remember { mutableStateOf(InkFeel()) }
+    var inkFeelDialogOpen by remember { mutableStateOf(false) }
+    var toolBarExpanded by remember { mutableStateOf(true) }
+    var worksheetFullScreen by remember(docId) { mutableStateOf(false) }
 
     var overflowExpanded by remember { mutableStateOf(false) }
     var renameDialogOpen by remember { mutableStateOf(false) }
@@ -127,29 +153,31 @@ fun EditorScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(doc?.title ?: "打开中…") },
-                colors = TopAppBarDefaults.topAppBarColors(),
-                navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                docState.value?.let { store.saveDocument(it) }
-                            }
-                            onBack()
-                        },
-                    ) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { overflowExpanded = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "更多")
-                    }
-                    DropdownMenu(
-                        expanded = overflowExpanded,
-                        onDismissRequest = { overflowExpanded = false },
-                    ) {
+            val hideBars = doc?.type == DocumentType.WORKSHEET && worksheetFullScreen
+            if (!hideBars) {
+                TopAppBar(
+                    title = { Text(doc?.title ?: "打开中…") },
+                    colors = TopAppBarDefaults.topAppBarColors(),
+                    navigationIcon = {
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    docState.value?.let { store.saveDocument(it) }
+                                }
+                                onBack()
+                            },
+                        ) {
+                            Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { overflowExpanded = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "更多")
+                        }
+                        DropdownMenu(
+                            expanded = overflowExpanded,
+                            onDismissRequest = { overflowExpanded = false },
+                        ) {
                         DropdownMenuItem(
                             text = { Text("重命名") },
                             onClick = {
@@ -281,6 +309,13 @@ fun EditorScreen(
                             },
                         )
                         DropdownMenuItem(
+                            text = { Text("书写手感…") },
+                            onClick = {
+                                overflowExpanded = false
+                                inkFeelDialogOpen = true
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text("导出 PDF") },
                             onClick = {
                                 overflowExpanded = false
@@ -312,51 +347,130 @@ fun EditorScreen(
                             },
                         )
                     }
-                },
-            )
-        },
-        bottomBar = {
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                ToolBar(
-                    modifier = Modifier.widthIn(max = 920.dp),
-                    tool = toolKindState.value,
-                    isEraser = isEraserState.value,
-                    colorArgb = colorArgbState.longValue,
-                    size = sizeState.floatValue,
-                    canUndo = undoStack.isNotEmpty(),
-                    canRedo = redoStack.isNotEmpty(),
-                    onUndo = {
-                        val current = docState.value ?: return@ToolBar
-                        if (undoStack.isEmpty()) return@ToolBar
-                        val prev = undoStack.removeLast()
-                        redoStack.addLast(current)
-                        docState.value = prev
-                        scope.launch { store.saveDocument(prev) }
                     },
-                    onRedo = {
-                        val current = docState.value ?: return@ToolBar
-                        if (redoStack.isEmpty()) return@ToolBar
-                        val next = redoStack.removeLast()
-                        undoStack.addLast(current)
-                        docState.value = next
-                        scope.launch { store.saveDocument(next) }
-                    },
-                    onToolChange = { toolKindState.value = it; isEraserState.value = false },
-                    onEraser = { isEraserState.value = true },
-                    onColorChange = { colorArgbState.longValue = it },
-                    onSizeChange = { sizeState.floatValue = it },
                 )
             }
         },
+        bottomBar = {
+            val density = LocalDensity.current
+            val dragThresholdPx = with(density) { 36.dp.toPx() }
+            var dragAccumulated by remember { mutableFloatStateOf(0f) }
+
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f))
+                            .pointerInput(toolBarExpanded) {
+                                detectVerticalDragGestures(
+                                    onVerticalDrag = { change, dragAmount ->
+                                        dragAccumulated += dragAmount
+                                        if (!toolBarExpanded && dragAccumulated < -dragThresholdPx) {
+                                            toolBarExpanded = true
+                                            dragAccumulated = 0f
+                                        } else if (toolBarExpanded && dragAccumulated > dragThresholdPx) {
+                                            toolBarExpanded = false
+                                            dragAccumulated = 0f
+                                        }
+                                        change.consume()
+                                    },
+                                    onDragEnd = { dragAccumulated = 0f },
+                                    onDragCancel = { dragAccumulated = 0f },
+                                )
+                            }
+                            .clickable {
+                                toolBarExpanded = !toolBarExpanded
+                                dragAccumulated = 0f
+                            }
+                            .padding(horizontal = 22.dp, vertical = 10.dp),
+                ) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f))
+                                .padding(horizontal = 16.dp, vertical = 2.dp),
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = toolBarExpanded,
+                    enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut(),
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val currentSize =
+                            if (isEraserState.value) {
+                                eraserSize
+                            } else {
+                                when (toolKindState.value) {
+                                    ToolKind.PEN -> penSize
+                                    ToolKind.PENCIL -> pencilSize
+                                    ToolKind.HIGHLIGHTER -> highlighterSize
+                                }
+                            }
+                        ToolBar(
+                            modifier = Modifier.widthIn(max = 920.dp),
+                            tool = toolKindState.value,
+                            isEraser = isEraserState.value,
+                            colorArgb = colorArgbState.longValue,
+                            size = currentSize,
+                            canUndo = undoStack.isNotEmpty(),
+                            canRedo = redoStack.isNotEmpty(),
+                            onUndo = {
+                                val current = docState.value ?: return@ToolBar
+                                if (undoStack.isEmpty()) return@ToolBar
+                                val prev = undoStack.removeLast()
+                                redoStack.addLast(current)
+                                docState.value = prev
+                                scope.launch { store.saveDocument(prev) }
+                            },
+                            onRedo = {
+                                val current = docState.value ?: return@ToolBar
+                                if (redoStack.isEmpty()) return@ToolBar
+                                val next = redoStack.removeLast()
+                                undoStack.addLast(current)
+                                docState.value = next
+                                scope.launch { store.saveDocument(next) }
+                            },
+                            onToolChange = { toolKindState.value = it; isEraserState.value = false },
+                            onEraser = { isEraserState.value = true },
+                            onColorChange = { colorArgbState.longValue = it },
+                            onSizeChange = { v ->
+                                if (isEraserState.value) {
+                                    eraserSize = v
+                                } else {
+                                    when (toolKindState.value) {
+                                        ToolKind.PEN -> penSize = v
+                                        ToolKind.PENCIL -> pencilSize = v
+                                        ToolKind.HIGHLIGHTER -> highlighterSize = v
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        },
     ) { paddingValues ->
+        LaunchedEffect(doc?.type) {
+            if (doc?.type != DocumentType.WORKSHEET) worksheetFullScreen = false
+        }
+        LaunchedEffect(worksheetFullScreen) {
+            if (worksheetFullScreen) toolBarExpanded = false
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(12.dp),
+                .padding(if (doc?.type == DocumentType.WORKSHEET && worksheetFullScreen) 0.dp else 12.dp),
         ) {
             when (doc?.type) {
                 DocumentType.BLANK -> {
@@ -365,8 +479,18 @@ fun EditorScreen(
                     isEraser = isEraserState.value,
                     tool = toolKindState.value,
                     colorArgb = colorArgbState.longValue,
-                    size = sizeState.floatValue,
+                    size =
+                        if (isEraserState.value) {
+                            eraserSize
+                        } else {
+                            when (toolKindState.value) {
+                                ToolKind.PEN -> penSize
+                                ToolKind.PENCIL -> pencilSize
+                                ToolKind.HIGHLIGHTER -> highlighterSize
+                            }
+                        },
                     simulatePressureWithSizeSlider = simulatePressureWithSizeSlider,
+                    inkFeel = inkFeel,
                     onDocChange = { updated, committed ->
                         if (committed) {
                             docState.value?.let { current ->
@@ -395,8 +519,18 @@ fun EditorScreen(
                     isEraser = isEraserState.value,
                     tool = toolKindState.value,
                     colorArgb = colorArgbState.longValue,
-                    size = sizeState.floatValue,
+                    size =
+                        if (isEraserState.value) {
+                            eraserSize
+                        } else {
+                            when (toolKindState.value) {
+                                ToolKind.PEN -> penSize
+                                ToolKind.PENCIL -> pencilSize
+                                ToolKind.HIGHLIGHTER -> highlighterSize
+                            }
+                        },
                     simulatePressureWithSizeSlider = simulatePressureWithSizeSlider,
+                    inkFeel = inkFeel,
                     onDocChange = { updated, committed ->
                         if (committed) {
                             docState.value?.let { current ->
@@ -422,11 +556,24 @@ fun EditorScreen(
             DocumentType.WORKSHEET -> {
                 WorksheetEditor(
                     doc = doc,
+                    isFullScreen = worksheetFullScreen,
+                    onFullScreenChange = { worksheetFullScreen = it },
                     isEraser = isEraserState.value,
                     tool = toolKindState.value,
                     colorArgb = colorArgbState.longValue,
-                    size = sizeState.floatValue,
+                    size =
+                        if (isEraserState.value) {
+                            eraserSize
+                        } else {
+                            when (toolKindState.value) {
+                                ToolKind.PEN -> penSize
+                                ToolKind.PENCIL -> pencilSize
+                                ToolKind.HIGHLIGHTER -> highlighterSize
+                            }
+                        },
                     simulatePressureWithSizeSlider = simulatePressureWithSizeSlider,
+                    inkFeel = inkFeel,
+                    openGenerateOnStart = openGenerateOnStart,
                     onDocChange = { updated, committed ->
                         if (committed) {
                             docState.value?.let { current ->
@@ -454,6 +601,73 @@ fun EditorScreen(
             }
             }
         }
+    }
+
+    if (inkFeelDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { inkFeelDialogOpen = false },
+            title = { Text("书写手感") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        "可调：粗细倍率 / 稳定度 / 压感曲线 / 掌托。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "粗细倍率：${"%.2f".format(inkFeel.sizeScale)}（默认 1 不影响历史笔迹）",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Slider(
+                            value = inkFeel.sizeScale,
+                            onValueChange = { v -> inkFeel = inkFeel.copy(sizeScale = v.coerceIn(0.6f, 2.0f)) },
+                            valueRange = 0.6f..2.0f,
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "稳定度：${"%.2f".format(inkFeel.stabilization)}（0=跟手，1=更稳）",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Slider(
+                            value = inkFeel.stabilization,
+                            onValueChange = { v -> inkFeel = inkFeel.copy(stabilization = v.coerceIn(0f, 1f)) },
+                            valueRange = 0f..1f,
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "压感曲线：${"%.2f".format(inkFeel.pressureGamma)}（<1 更显压，>1 更细）",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Slider(
+                            value = inkFeel.pressureGamma,
+                            onValueChange = { v -> inkFeel = inkFeel.copy(pressureGamma = v.coerceIn(0.6f, 1.4f)) },
+                            valueRange = 0.6f..1.4f,
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("增强掌托", style = MaterialTheme.typography.labelMedium)
+                        Switch(
+                            checked = inkFeel.enhancedPalmRejection,
+                            onCheckedChange = { checked -> inkFeel = inkFeel.copy(enhancedPalmRejection = checked) },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { inkFeelDialogOpen = false }) { Text("关闭") }
+            },
+        )
     }
 
     if (renameDialogOpen) {

@@ -76,11 +76,24 @@ data class WorksheetNote(
 )
 
 @Serializable
+enum class WorksheetPageType {
+    QUESTION,
+    ANSWER,
+}
+
+@Serializable
 data class WorksheetPage(
     val id: String = "p1",
+    val type: WorksheetPageType = WorksheetPageType.QUESTION,
     val title: String? = null,
     val backgroundImageUri: String? = null,
     val questionText: String? = null,
+    // For ANSWER pages: points back to the question page ID.
+    val answerForPageId: String? = null,
+    // For ANSWER pages: the explainer content (may include LaTeX).
+    val answerText: String? = null,
+    // Debug: original LLM response (before parsing to questionText). May be large.
+    val sourceRawMessage: String? = null,
     val strokes: List<StrokeDto> = emptyList(),
     val canvasWidthPx: Int = 0,
     val canvasHeightPx: Int = 0,

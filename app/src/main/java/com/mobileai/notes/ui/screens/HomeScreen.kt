@@ -64,7 +64,7 @@ import com.mobileai.notes.ui.widgets.VerticalScrollbar
 @Composable
 fun HomeScreen(
     store: DocumentStore,
-    onOpenDocument: (docId: String) -> Unit,
+    onOpenDocument: (docId: String, openGenerateOnStart: Boolean) -> Unit,
     onOpenAiSettings: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -89,7 +89,7 @@ fun HomeScreen(
                 }
                 runCatching {
                     store.createFromPdf(uri = uri, title = "PDF 批注")
-                }.onSuccess(onOpenDocument)
+                }.onSuccess { onOpenDocument(it, false) }
             }
         },
     )
@@ -155,13 +155,13 @@ fun HomeScreen(
                         onClick = {
                             scope.launch {
                                 val id = store.createWorksheet(title = "AI 试卷")
-                                onOpenDocument(id)
+                                onOpenDocument(id, false)
                             }
                         },
                     ) {
                         Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("AI 生成试卷")
+                        Text("生成AI试卷")
                     }
                 }
             }
@@ -172,7 +172,7 @@ fun HomeScreen(
                     onClick = {
                         scope.launch {
                             val id = store.createBlank(title = "空白笔记")
-                            onOpenDocument(id)
+                            onOpenDocument(id, false)
                         }
                     },
                 ) {
@@ -229,7 +229,7 @@ fun HomeScreen(
 
                     items(documents, key = { it.id }) { doc ->
                         ElevatedCard(
-                            onClick = { onOpenDocument(doc.id) },
+                            onClick = { onOpenDocument(doc.id, false) },
                             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
                             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
                         ) {

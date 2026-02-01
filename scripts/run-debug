@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+"$ROOT/scripts/gradle" :app:installDebug --no-daemon
+
+sdk_dir=""
+if [[ -f "$ROOT/local.properties" ]]; then
+  sdk_dir="$(grep -F 'sdk.dir=' "$ROOT/local.properties" | head -n1 | cut -d= -f2- || true)"
+fi
+sdk_dir="${sdk_dir:-${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}}"
+
+ADB=""
+if [[ -n "$sdk_dir" && -x "$sdk_dir/platform-tools/adb" ]]; then
+  ADB="$sdk_dir/platform-tools/adb"
+elif command -v adb >/dev/null 2>&1; then
+  ADB="adb"
+else
+  echo "adb not found. Set ANDROID_SDK_ROOT (or ANDROID_HOME) or configure sdk.dir in local.properties." >&2
+  exit 1
+fi
+
+serial="${ANDROID_SERIAL:-}"
+if [[ -z "$serial" ]]; then
+  serial="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1; exit}')"
+fi
+if [[ -z "$serial" ]]; then
+  echo "No connected Android device/emulator found." >&2
+  exit 1
+fi
+
+pkg="com.mobileai.notes"
+activity="$pkg/.MainActivity"
+
+"$ADB" -s "$serial" shell am force-stop "$pkg" >/dev/null 2>&1 || true
+"$ADB" -s "$serial" shell am start -n "$activity" >/dev/null
+
+echo "Launched $pkg on $serial"

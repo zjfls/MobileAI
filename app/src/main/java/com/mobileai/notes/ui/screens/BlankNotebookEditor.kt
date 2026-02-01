@@ -24,6 +24,7 @@ import com.mobileai.notes.data.BlankNotebook
 import com.mobileai.notes.data.DocumentEntity
 import com.mobileai.notes.data.ToolKind
 import com.mobileai.notes.ink.InkCanvas
+import com.mobileai.notes.ink.InkFeel
 import com.mobileai.notes.ui.widgets.PageTemplateBackground
 import com.mobileai.notes.ui.widgets.VerticalScrollbar
 
@@ -35,13 +36,16 @@ fun BlankNotebookEditor(
     colorArgb: Long,
     size: Float,
     simulatePressureWithSizeSlider: Boolean,
+    inkFeel: InkFeel = InkFeel(),
     onDocChange: (DocumentEntity, committed: Boolean) -> Unit,
 ) {
     val notebook = doc.blank ?: BlankNotebook()
     val listState = rememberLazyListState()
+    val inkingState = remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
+            userScrollEnabled = !inkingState.value,
             modifier = Modifier.fillMaxSize().padding(end = 12.dp),
         ) {
             itemsIndexed(notebook.pages) { pageIndex, page ->
@@ -66,6 +70,8 @@ fun BlankNotebookEditor(
                         colorArgb = colorArgb,
                         size = size,
                         simulatePressureWithSizeSlider = simulatePressureWithSizeSlider,
+                        feel = inkFeel,
+                        onInkingChanged = { active -> inkingState.value = active },
                         onStrokesChange = { updatedStrokes, committed ->
                             val px = pageSizeState.value
                             val updatedPages = notebook.pages.toMutableList()

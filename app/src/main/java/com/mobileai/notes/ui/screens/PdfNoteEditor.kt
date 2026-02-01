@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -33,6 +34,7 @@ import com.mobileai.notes.data.PdfPageAnnotations
 import com.mobileai.notes.data.StrokeDto
 import com.mobileai.notes.data.ToolKind
 import com.mobileai.notes.ink.InkCanvas
+import com.mobileai.notes.ink.InkFeel
 import com.mobileai.notes.pdf.PdfBitmapCache
 import com.mobileai.notes.pdf.PdfDocumentHandle
 import com.mobileai.notes.ui.widgets.VerticalScrollbar
@@ -45,6 +47,7 @@ fun PdfNoteEditor(
     colorArgb: Long,
     size: Float,
     simulatePressureWithSizeSlider: Boolean,
+    inkFeel: InkFeel = InkFeel(),
     onDocChange: (DocumentEntity, committed: Boolean) -> Unit,
 ) {
     val pdf = doc.pdf ?: return
@@ -63,9 +66,11 @@ fun PdfNoteEditor(
     val cache = remember { PdfBitmapCache(maxBytes = 64 * 1024 * 1024) } // 64MB
 
     val listState = rememberLazyListState()
+    val inkingState = remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
+            userScrollEnabled = !inkingState.value,
             modifier = Modifier.fillMaxSize().padding(end = 12.dp),
         ) {
             items((0 until pdf.pageCount).toList()) { pageIndex ->
@@ -115,6 +120,8 @@ fun PdfNoteEditor(
                                 colorArgb = colorArgb,
                                 size = size,
                                 simulatePressureWithSizeSlider = simulatePressureWithSizeSlider,
+                                feel = inkFeel,
+                                onInkingChanged = { active -> inkingState.value = active },
                                 onStrokesChange = { updatedStrokes, committed ->
                                     val updatedPdf =
                                         setPageStrokes(

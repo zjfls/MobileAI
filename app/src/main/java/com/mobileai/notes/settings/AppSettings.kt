@@ -10,6 +10,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -18,14 +19,6 @@ import kotlinx.serialization.json.jsonObject
 import java.util.UUID
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
-
-data class HostSettings(
-    val baseUrl: String,
-) {
-    companion object {
-        val Default = HostSettings(baseUrl = "https://api.mock-edu.com")
-    }
-}
 
 @Serializable
 data class AiProvider(
@@ -36,6 +29,25 @@ data class AiProvider(
     val apiKey: String = "",
     val enabled: Boolean = true,
     val models: List<String> = emptyList(),
+    // Optional per-model sampling overrides. If set, they take precedence over Agent defaults.
+    val modelParams: Map<String, AiModelParams> = emptyMap(),
+)
+
+@Serializable
+data class AiModelParams(
+    val temperature: Float? = null,
+    // When null, treat as legacy behavior (enabled if value is present).
+    val temperatureEnabled: Boolean? = null,
+    @SerialName("top_p")
+    val topP: Float? = null,
+    // When null, treat as legacy behavior (enabled if value is present).
+    @SerialName("top_p_enabled")
+    val topPEnabled: Boolean? = null,
+    @SerialName("max_tokens")
+    val maxTokens: Int? = null,
+    // When null, treat as legacy behavior (enabled if value is present).
+    @SerialName("max_tokens_enabled")
+    val maxTokensEnabled: Boolean? = null,
 )
 
 @Serializable
@@ -95,6 +107,8 @@ data class AiSettings(
                 model = "gpt-4o-mini",
                 systemPrompt = """
 你是专业出题老师。请根据用户要求生成试题。
+范围：数学分析（极限、微分、积分）。
+题型：计算题、证明题。
 要求：
 - 返回严格 JSON（不要 Markdown），格式为：{"questions":[{"title":"题目1","text":"..."}]}
 - 题目要有可作答空间，不要直接给答案。
@@ -111,7 +125,6 @@ data class AiSettings(
                 model = "gpt-4o-mini",
                 systemPrompt = """
 你是耐心的讲解老师。请对题目与学生作答进行讲解和纠错。
-输出 Markdown：先给评分/结论，再给步骤解析，最后给易错点总结。
 """.trim(),
                 temperature = 0.3f,
                 maxTokens = 2048,
@@ -140,28 +153,12 @@ data class AiSettings(
 )
 
 class AppSettings(private val context: Context) {
-    private val keyHostBaseUrl = stringPreferencesKey("host_base_url")
     private val keyAiSettingsJson = stringPreferencesKey("ai_settings_json")
 
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
         prettyPrint = true
-    }
-
-    val hostSettings: Flow<HostSettings> =
-        context.dataStore.data.map { prefs ->
-            HostSettings(
-                baseUrl = prefs[keyHostBaseUrl] ?: HostSettings.Default.baseUrl,
-            )
-        }
-
-    suspend fun setHostBaseUrl(url: String) {
-        withContext(NonCancellable) {
-            context.dataStore.edit { prefs ->
-                prefs[keyHostBaseUrl] = url.trim()
-            }
-        }
     }
 
     val aiSettings: Flow<AiSettings> =

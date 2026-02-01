@@ -6,29 +6,53 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 class AnthropicClient(
-    private val http: OkHttpClient = OkHttpClient(),
+    private val http: OkHttpClient =
+        OkHttpClient.Builder()
+            .callTimeout(150, TimeUnit.SECONDS)
+            .connectTimeout(150, TimeUnit.SECONDS)
+            .readTimeout(150, TimeUnit.SECONDS)
+            .writeTimeout(150, TimeUnit.SECONDS)
+            .build(),
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
-    suspend fun messages(
+    private fun sanitizeBodyPreview(body: String): String {
+        // Avoid storing huge base64 blobs in debug payloads (multimodal).
+        val base64Runs = Regex("[A-Za-z0-9+/=]{2000,}")
+        return base64Runs.replace(body) { m -> "<base64 len=${m.value.length}>" }
+    }
+
+    private fun headersToPairs(headers: Headers): List<Pair<String, String>> =
+        headers.names()
+            .sorted()
+            .flatMap { name -> headers.values(name).map { value -> name to value } }
+
+    suspend fun messagesWithRawResponse(
         baseUrl: String,
         apiKey: String,
         model: String,
         systemPrompt: String,
         userText: String,
         userImagePngBytes: ByteArray? = null,
-        temperature: Float = 0.4f,
+        requireJsonObject: Boolean = false,
+        jsonEnvelopeKey: String = "questions",
+        expectedQuestionsCountForSchema: Int? = null,
+        temperature: Float? = 0.4f,
+        topP: Float? = null,
         maxTokens: Int = 2048,
-    ): String = withContext(Dispatchers.IO) {
+    ): AiHttpResult = withContext(Dispatchers.IO) {
         val root = baseUrl.trimEnd('/')
         val url = if (root.endsWith("/v1")) "$root/messages" else "$root/v1/messages"
 
@@ -57,8 +81,9 @@ class AnthropicClient(
             buildJsonObject {
                 put("model", JsonPrimitive(model))
                 put("max_tokens", JsonPrimitive(maxTokens))
-                put("temperature", JsonPrimitive(temperature))
-                put("system", JsonPrimitive(systemPrompt))
+                temperature?.let { put("temperature", JsonPrimitive(it)) }
+                topP?.let { put("top_p", JsonPrimitive(it)) }
+                if (systemPrompt.isNotBlank()) put("system", JsonPrimitive(systemPrompt))
                 put(
                     "messages",
                     buildJsonArray {
@@ -70,22 +95,143 @@ class AnthropicClient(
                         )
                     },
                 )
+
+                if (requireJsonObject) {
+                    val questionSchema =
+                        buildJsonObject {
+                            put("type", JsonPrimitive("object"))
+                            put(
+                                "properties",
+                                buildJsonObject {
+                                    put("title", buildJsonObject { put("type", JsonPrimitive("string")) })
+                                    put("text", buildJsonObject { put("type", JsonPrimitive("string")) })
+                                    put("image_url", buildJsonObject { put("type", JsonPrimitive("string")) })
+                                    put("image_base64", buildJsonObject { put("type", JsonPrimitive("string")) })
+                                },
+                            )
+                            put(
+                                "required",
+                                buildJsonArray {
+                                    add(JsonPrimitive("title"))
+                                    add(JsonPrimitive("text"))
+                                },
+                            )
+                        }
+                    val envelopeSchema =
+                        buildJsonObject {
+                            put("type", JsonPrimitive("object"))
+                            put(
+                                "properties",
+                                buildJsonObject {
+                                    put(
+                                        jsonEnvelopeKey,
+                                        buildJsonObject {
+                                            put("type", JsonPrimitive("array"))
+                                            expectedQuestionsCountForSchema?.let { n ->
+                                                put("minItems", JsonPrimitive(n))
+                                                put("maxItems", JsonPrimitive(n))
+                                            }
+                                            put("items", questionSchema)
+                                        },
+                                    )
+                                },
+                            )
+                            put(
+                                "required",
+                                buildJsonArray {
+                                    add(JsonPrimitive(jsonEnvelopeKey))
+                                },
+                            )
+                        }
+                    val toolName = "submit_${jsonEnvelopeKey}"
+                    put(
+                        "tools",
+                        buildJsonArray {
+                            add(
+                                buildJsonObject {
+                                    put("name", JsonPrimitive(toolName))
+                                    put("description", JsonPrimitive("Return ${jsonEnvelopeKey} strictly as JSON."))
+                                    put("input_schema", envelopeSchema)
+                                },
+                            )
+                        },
+                    )
+                    put(
+                        "tool_choice",
+                        buildJsonObject {
+                            put("type", JsonPrimitive("tool"))
+                            put("name", JsonPrimitive(toolName))
+                        },
+                    )
+                }
             }
+
+        val body = requestJson.toString()
+        val requestPreview = sanitizeBodyPreview(body)
 
         val req =
             Request.Builder()
                 .url(url)
                 .header("x-api-key", apiKey)
                 .header("anthropic-version", "2023-06-01")
-                .post(requestJson.toString().toRequestBody("application/json".toMediaType()))
+                .post(body.toRequestBody("application/json".toMediaType()))
                 .build()
 
-        http.newCall(req).execute().use { resp ->
+        val call = http.newCall(req)
+        call.await().use { resp ->
             val raw = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) error("HTTP ${resp.code}: $raw")
+                val exchange =
+                    AiHttpExchange(
+                        requestUrl = url,
+                        requestBodyPreview = requestPreview,
+                        requestBodyRaw = null,
+                        responseProtocol = resp.protocol.toString(),
+                        responseCode = resp.code,
+                        responseMessage = resp.message,
+                        responseHeaders = headersToPairs(resp.headers),
+                        responseBody = raw,
+                    )
+            if (!resp.isSuccessful) throw AiHttpException(exchange)
             val parsed = json.decodeFromString(AnthropicMessagesResponse.serializer(), raw)
-            parsed.content.joinToString("") { it.text.orEmpty() }.trim()
+            if (requireJsonObject) {
+                val toolJson = parsed.content.firstOrNull { it.type == "tool_use" }?.input?.toString()?.trim()
+                if (!toolJson.isNullOrBlank()) return@withContext AiHttpResult(text = toolJson, exchange = exchange)
+            }
+            AiHttpResult(
+                text = parsed.content.joinToString("") { it.text.orEmpty() }.trim(),
+                exchange = exchange,
+            )
         }
+    }
+
+    suspend fun messages(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        userImagePngBytes: ByteArray? = null,
+        requireJsonObject: Boolean = false,
+        jsonEnvelopeKey: String = "questions",
+        expectedQuestionsCountForSchema: Int? = null,
+        temperature: Float? = 0.4f,
+        topP: Float? = null,
+        maxTokens: Int = 2048,
+    ): String {
+        return messagesWithRawResponse(
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            model = model,
+            systemPrompt = systemPrompt,
+            userText = userText,
+            userImagePngBytes = userImagePngBytes,
+            requireJsonObject = requireJsonObject,
+            jsonEnvelopeKey = jsonEnvelopeKey,
+            expectedQuestionsCountForSchema = expectedQuestionsCountForSchema,
+            temperature = temperature,
+            topP = topP,
+            maxTokens = maxTokens,
+        ).text
     }
 
     suspend fun listModels(
@@ -103,9 +249,21 @@ class AnthropicClient(
                 .get()
                 .build()
 
-        http.newCall(req).execute().use { resp ->
+        val call = http.newCall(req)
+        call.await().use { resp ->
             val raw = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) error("HTTP ${resp.code}: $raw")
+                val exchange =
+                    AiHttpExchange(
+                        requestUrl = url,
+                        requestBodyPreview = "",
+                        requestBodyRaw = null,
+                        responseProtocol = resp.protocol.toString(),
+                        responseCode = resp.code,
+                        responseMessage = resp.message,
+                        responseHeaders = headersToPairs(resp.headers),
+                        responseBody = raw,
+                    )
+            if (!resp.isSuccessful) throw AiHttpException(exchange)
 
             // Anthropic's schema varies by version; parse best-effort.
             val element = json.parseToJsonElement(raw)
@@ -135,4 +293,6 @@ private data class AnthropicMessagesResponse(
 private data class AnthropicContentPart(
     val type: String? = null,
     val text: String? = null,
+    val name: String? = null,
+    val input: JsonElement? = null,
 )

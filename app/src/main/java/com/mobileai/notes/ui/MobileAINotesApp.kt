@@ -26,8 +26,8 @@ fun MobileAINotesApp() {
         composable(Routes.Home) {
             HomeScreen(
                 store = store,
-                onOpenDocument = { docId ->
-                    navController.navigate(Routes.editor(docId))
+                onOpenDocument = { docId, openGenerateOnStart ->
+                    navController.navigate(Routes.editor(docId, openGenerateOnStart))
                 },
                 onOpenAiSettings = { navController.navigate(Routes.AiSettings) },
             )
@@ -37,12 +37,21 @@ fun MobileAINotesApp() {
         }
         composable(
             Routes.Editor,
-            arguments = listOf(navArgument(Routes.ArgDocId) { type = NavType.StringType }),
+            arguments =
+                listOf(
+                    navArgument(Routes.ArgDocId) { type = NavType.StringType },
+                    navArgument(Routes.ArgAutoGen) {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    },
+                ),
         ) { backStackEntry ->
             val docId = backStackEntry.arguments?.getString(Routes.ArgDocId) ?: return@composable
+            val autoGen = backStackEntry.arguments?.getBoolean(Routes.ArgAutoGen) ?: false
             EditorScreen(
                 store = store,
                 docId = docId,
+                openGenerateOnStart = autoGen,
                 onBack = { navController.popBackStack() },
                 onOpenAiSettings = { navController.navigate(Routes.AiSettings) },
             )
@@ -52,9 +61,15 @@ fun MobileAINotesApp() {
 
 private object Routes {
     const val ArgDocId = "docId"
+    const val ArgAutoGen = "autogen"
     const val Home = "home"
     const val AiSettings = "ai_settings"
-    const val Editor = "editor/{$ArgDocId}"
+    const val Editor = "editor/{$ArgDocId}?$ArgAutoGen={$ArgAutoGen}"
 
-    fun editor(docId: String) = "editor/$docId"
+    fun editor(docId: String, autoGen: Boolean = false): String =
+        if (autoGen) {
+            "editor/$docId?$ArgAutoGen=true"
+        } else {
+            "editor/$docId"
+        }
 }
